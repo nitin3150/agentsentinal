@@ -12,8 +12,6 @@ arq
 asyncpg 
 sqlalchemy
 
-google-generativeai 
 langchain 
-langchain-google-vertexai 
-presidio-analyzer 
-presidio-anonymizer
+# presidio-analyzer 
+# presidio-anonymizer
