@@ -1,5 +1,6 @@
+from agentsentinal.models.agent import InspectedAgentProfile
 import asyncio
-from typing import Any, Optional
+from typing import Any
 
 from agentsentinal.core.agents.inspector.aggregator import aggregate
 from agentsentinal.core.agents.inspector.analyzers.framework import (
@@ -22,7 +23,6 @@ from agentsentinal.core.agents.inspector.analyzers.tools import (
     ToolsAnalysis,
     analyze_tools,
 )
-from agentsentinal.intake import extract
 from agentsentinal.intake.types import ExtractionResult
 from agentsentinal.models import AgentProfile
 
@@ -31,30 +31,23 @@ CONFIDENCE_WARNING_THRESHOLD = 0.6
 
 
 class InspectorAgent:
-    """Reads an agent's configuration and produces an AgentProfile.
+    """Analyses an already-extracted AgentProfile and returns an InspectedAgentProfile.
 
-    Never invokes the agent. Inspection only — config + static + one LLM call.
+    Never invokes the agent. Inspection only — static analysis + one optional LLM call.
     """
 
     def __init__(self, semantic_enabled: bool = True):
         self.semantic_enabled = semantic_enabled
 
-    async def inspect(
-        self,
-        agent_id: str,
-        agent: Any = None,
-        system_prompt: Optional[str] = None,
-        tool_definitions: Optional[list[dict[str, Any]]] = None,
-        file_path: Optional[str] = None,
-        framework_hint: Optional[str] = None,
-    ) -> AgentProfile:
-        extraction = extract(
-            agent=agent,
-            system_prompt=system_prompt,
-            tool_definitions=tool_definitions,
-            file_path=file_path,
-            framework_hint=framework_hint,
+    async def inspect(self, profile: AgentProfile) -> InspectedAgentProfile:
+        extraction = ExtractionResult(
+            system_prompt=profile.system_prompt,
+            tool_definitions=profile.tool_definitions,
+            framework=str(profile.framework) if profile.framework else "unknown",
+            source_object=profile.source_object,
+            warnings=list(profile.warnings),
         )
+        extraction.confidence = extraction.compute_confidence()
 
         if extraction.confidence < CONFIDENCE_WARNING_THRESHOLD:
             extraction.warnings.append(
@@ -62,10 +55,8 @@ class InspectorAgent:
                 "Pass system_prompt and tool_definitions explicitly for a more complete analysis."
             )
 
-        # The four static dimensions run concurrently. Semantic runs after them because
-        # it needs prompt-analysis output (constraint_count, ambiguous_phrases) injected
-        # into its LLM prompt for context. Do not merge it back into the 5-way gather
-        # without first removing that dependency.
+        # Static dimensions run concurrently; semantic runs after because it needs
+        # prompt-analysis output (constraint_count, ambiguous_phrases) for context.
         prompt_res, tools_res, memory_res, framework_res = await asyncio.gather(
             asyncio.to_thread(analyze_prompt, extraction.system_prompt),
             asyncio.to_thread(analyze_tools, extraction.tool_definitions),
@@ -92,7 +83,7 @@ class InspectorAgent:
         semantic = _unwrap(semantic_res, SemanticAnalysis, extraction, "semantic")
 
         return aggregate(
-            agent_id=agent_id,
+            agent_id="",
             extraction=extraction,
             prompt=prompt,
             tools=tools,
@@ -117,7 +108,6 @@ class InspectorAgent:
 
 
 def _unwrap(value: Any, expected_type: type, extraction: ExtractionResult, label: str):
-    """Map gather-return into either the analysis object or None, recording errors."""
     if isinstance(value, BaseException):
         extraction.warnings.append(f"{label} analyzer failed: {type(value).__name__}: {value}")
         return None

@@ -1,5 +1,6 @@
 from agentsentinal.models.agent import (
     AgentProfile,
+    InspectedAgentProfile,
     RiskFlag,
     RiskLevel,
     RiskCategory,
@@ -8,6 +9,7 @@ from agentsentinal.models.agent import (
 
 __all__ = [
     "AgentProfile",
+    "InspectedAgentProfile",
     "RiskFlag",
     "RiskLevel",
     "RiskCategory",

@@ -1,3 +1,4 @@
+from agentsentinal.models.agent import InspectedAgentProfile
 from typing import Optional
 
 from agentsentinal.core.agents.inspector.analyzers.framework import FrameworkAnalysis
@@ -6,7 +7,7 @@ from agentsentinal.core.agents.inspector.analyzers.prompt import PromptAnalysis
 from agentsentinal.core.agents.inspector.analyzers.semantic import SemanticAnalysis
 from agentsentinal.core.agents.inspector.analyzers.tools import ToolsAnalysis
 from agentsentinal.intake.types import ExtractionResult
-from agentsentinal.models import AgentProfile, RiskFlag, RiskLevel
+from agentsentinal.models import RiskFlag, RiskLevel
 
 
 def _overall_risk(flags: list[RiskFlag]) -> RiskLevel:
@@ -25,13 +26,16 @@ def aggregate(
     memory: Optional[MemoryAnalysis],
     framework: Optional[FrameworkAnalysis],
     semantic: Optional[SemanticAnalysis],
-) -> AgentProfile:
+) -> InspectedAgentProfile:
     flags: list[RiskFlag] = []
     ambiguous: list[str] = []
 
     profile_kwargs: dict = {
         "agent_id": agent_id,
+        "system_prompt": extraction.system_prompt,
+        "tool_definitions": list(extraction.tool_definitions),
         "framework": extraction.framework,
+        "warnings": list(extraction.warnings),
         "extraction_confidence": extraction.confidence,
         "extraction_warnings": list(extraction.warnings),
     }
@@ -95,4 +99,4 @@ def aggregate(
     profile_kwargs["risk_flags"] = flags
     profile_kwargs["overall_risk"] = _overall_risk(flags)
 
-    return AgentProfile(**profile_kwargs)
+    return InspectedAgentProfile(**profile_kwargs)

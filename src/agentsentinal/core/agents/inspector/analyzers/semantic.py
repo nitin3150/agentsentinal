@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from agentsentinal.models import RiskCategory, RiskFlag, RiskLevel
 
 
-DEFAULT_MODEL = os.getenv("AGENTSENTINEL_SEMANTIC_MODEL", "gemini-2.0-flash")
+DEFAULT_MODEL = os.getenv("MODEL", "gemini-2.0-flash")
 
 SEMANTIC_PROMPT = """You are an AI agent auditor. Analyse the system prompt below and return JSON only.
 

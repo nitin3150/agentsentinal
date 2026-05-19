@@ -40,16 +40,22 @@ class ToolProfile(BaseModel):
     missing_fields: list[str] = Field(default_factory=list)
     quality_score: int = Field(ge=1, le=10)
 
+
 class AgentProfile(BaseModel):
     system_prompt: str
     tool_definitions: List[dict] = Field(default_factory=list)
-    framework: Any = 'unknown'
-    warnings:list[str] = Field(default_factory=list)
+    framework: Any = "unknown"
+    warnings: list[str] = Field(default_factory=list)
+    source_object: Optional[Any] = None
 
-class AgentProfile1(BaseModel):
+    model_config = {"arbitrary_types_allowed": True}
+
+
+class InspectedAgentProfile(AgentProfile):
+    """Extended profile produced by InspectorAgent after full static + semantic analysis."""
+
     # Identity
-    agent_id: str
-    framework: str = "unknown"
+    agent_id: str = ""
 
     # Prompt quality
     persona_clarity_score: int = Field(ge=1, le=10, default=5)
@@ -87,3 +93,7 @@ class AgentProfile1(BaseModel):
     # Extraction metadata
     extraction_confidence: float = Field(ge=0.0, le=1.0, default=0.0)
     extraction_warnings: list[str] = Field(default_factory=list)
+
+
+# Backwards-compat alias — remove once all callers updated
+AgentProfile1 = InspectedAgentProfile
