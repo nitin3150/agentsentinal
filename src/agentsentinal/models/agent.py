@@ -1,3 +1,5 @@
+from typing import List
+from typing import Any
 from enum import Enum
 from typing import Optional
 
@@ -38,8 +40,13 @@ class ToolProfile(BaseModel):
     missing_fields: list[str] = Field(default_factory=list)
     quality_score: int = Field(ge=1, le=10)
 
-
 class AgentProfile(BaseModel):
+    system_prompt: str
+    tool_definitions: List[dict] = Field(default_factory=list)
+    framework: Any = 'unknown'
+    warnings:list[str] = Field(default_factory=list)
+
+class AgentProfile1(BaseModel):
     # Identity
     agent_id: str
     framework: str = "unknown"
