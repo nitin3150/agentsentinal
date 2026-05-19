@@ -193,24 +193,24 @@ async def main():
     print(f"\n{'─'*50}")
     print(f"  IMPROVED PROMPT")
     print(f"{'─'*50}")
-    print(result['improved_prompt'])
+    print(result.improved_prompt)
 
     print(f"\n{'─'*50}")
     print(f"  IMPROVED TOOLS")
     print(f"{'─'*50}")
-    for t in result['improved_tool_definitions']:
+    for t in result.improved_tool_definitions:
         print(f"\n  [{t['name']}]")
         print(f"  {t['description']}")
 
     print(f"\n{'─'*50}")
     print(f"  CHANGE LOG")
     print(f"{'─'*50}")
-    for entry in result['change_log']:
+    for entry in result.change_log:
         print(f"  • {entry}")
 
-    if result['policy_violations']:
+    if result.policy_violations:
         print(f"\n  ⚠  POLICY VIOLATIONS DETECTED:")
-        for v in result['policy_violations']:
+        for v in result.policy_violations:
             print(f"    ✗ {v}")
     else:
         print(f"\n  ✓  No policy violations.")
