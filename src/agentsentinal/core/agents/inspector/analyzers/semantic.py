@@ -1,4 +1,6 @@
+import asyncio
 import json
+import logging
 import os
 import re
 from typing import Any, Optional
@@ -7,8 +9,12 @@ from pydantic import BaseModel, Field
 
 from agentsentinal.models import RiskCategory, RiskFlag, RiskLevel
 
+logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = os.getenv("MODEL", "gemini-2.0-flash")
+DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+# OpenRouter uses the MODEL env var; override with SEMANTIC_MODEL to pin a specific model.
+DEFAULT_OPENROUTER_MODEL = os.getenv("SEMANTIC_MODEL") or os.getenv("MODEL", "openai/gpt-4o-mini")
+SEMANTIC_TIMEOUT = float(os.getenv("SEMANTIC_TIMEOUT", "30"))
 
 SEMANTIC_PROMPT = """You are an AI agent auditor. Analyse the system prompt below and return JSON only.
 
@@ -129,6 +135,36 @@ def _parse_payload(payload: dict) -> SemanticAnalysis:
     )
 
 
+async def _call_openrouter(rendered_prompt: str) -> Optional[str]:
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        return None
+    try:
+        from openai import AsyncOpenAI
+    except ImportError:
+        return None
+    try:
+        client = AsyncOpenAI(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+        )
+        response = await asyncio.wait_for(
+            client.chat.completions.create(
+                model=DEFAULT_OPENROUTER_MODEL,
+                messages=[{"role": "user", "content": rendered_prompt}],
+                temperature=0,
+            ),
+            timeout=SEMANTIC_TIMEOUT,
+        )
+        return response.choices[0].message.content
+    except asyncio.TimeoutError:
+        logger.warning("Semantic analysis (OpenRouter) timed out after %.0fs", SEMANTIC_TIMEOUT)
+        return None
+    except Exception as exc:
+        logger.warning("Semantic analysis (OpenRouter) failed: %s: %s", type(exc).__name__, exc)
+        return None
+
+
 async def _call_gemini(rendered_prompt: str) -> Optional[str]:
     api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -140,10 +176,17 @@ async def _call_gemini(rendered_prompt: str) -> Optional[str]:
 
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(DEFAULT_MODEL)
-        resp = await model.generate_content_async(rendered_prompt)
+        model = genai.GenerativeModel(DEFAULT_GEMINI_MODEL)
+        resp = await asyncio.wait_for(
+            model.generate_content_async(rendered_prompt),
+            timeout=SEMANTIC_TIMEOUT,
+        )
         return getattr(resp, "text", None)
-    except Exception:
+    except asyncio.TimeoutError:
+        logger.warning("Semantic analysis timed out after %.0fs", SEMANTIC_TIMEOUT)
+        return None
+    except Exception as exc:
+        logger.warning("Semantic analysis failed: %s: %s", type(exc).__name__, exc)
         return None
 
 
@@ -166,15 +209,17 @@ async def analyze_semantic(
         constraint_count=static_findings.get("constraint_count", 0),
     )
 
-    raw = await _call_gemini(rendered)
+    raw = await _call_openrouter(rendered) or await _call_gemini(rendered)
     if not raw:
-        return SemanticAnalysis()  # offline / API failure → safe defaults
+        return SemanticAnalysis()
 
     payload = _tolerant_json_load(raw)
     if not isinstance(payload, dict):
+        logger.warning("Semantic analysis returned unparseable JSON")
         return SemanticAnalysis()
 
     try:
         return _parse_payload(payload)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Semantic payload parsing failed: %s: %s", type(exc).__name__, exc)
         return SemanticAnalysis()

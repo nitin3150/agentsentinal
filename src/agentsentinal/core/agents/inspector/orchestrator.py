@@ -1,6 +1,7 @@
 from agentsentinal.models.agent import InspectedAgentProfile
 import asyncio
 from typing import Any
+from uuid import uuid4
 
 from agentsentinal.core.agents.inspector.aggregator import aggregate
 from agentsentinal.core.agents.inspector.analyzers.framework import (
@@ -55,15 +56,24 @@ class InspectorAgent:
                 "Pass system_prompt and tool_definitions explicitly for a more complete analysis."
             )
 
-        # Static dimensions run concurrently; semantic runs after because it needs
-        # prompt-analysis output (constraint_count, ambiguous_phrases) for context.
-        prompt_res, tools_res, memory_res, framework_res = await asyncio.gather(
-            asyncio.to_thread(analyze_prompt, extraction.system_prompt),
-            asyncio.to_thread(analyze_tools, extraction.tool_definitions),
-            asyncio.to_thread(analyze_memory, extraction.source_object, extraction.source_code),
-            asyncio.to_thread(analyze_framework, extraction.source_object, extraction.source_code),
-            return_exceptions=True,
-        )
+        # Static analyzers are pure Python (no I/O, no GIL release) — run them
+        # directly rather than via to_thread to avoid pointless thread overhead.
+        try:
+            prompt_res = analyze_prompt(extraction.system_prompt)
+        except Exception as exc:
+            prompt_res = exc
+        try:
+            tools_res = analyze_tools(extraction.tool_definitions)
+        except Exception as exc:
+            tools_res = exc
+        try:
+            memory_res = analyze_memory(extraction.source_object, extraction.source_code)
+        except Exception as exc:
+            memory_res = exc
+        try:
+            framework_res = analyze_framework(extraction.source_object, extraction.source_code)
+        except Exception as exc:
+            framework_res = exc
 
         static_findings = {}
         if isinstance(prompt_res, PromptAnalysis):
@@ -83,7 +93,7 @@ class InspectorAgent:
         semantic = _unwrap(semantic_res, SemanticAnalysis, extraction, "semantic")
 
         return aggregate(
-            agent_id="",
+            agent_id=str(uuid4()),
             extraction=extraction,
             prompt=prompt,
             tools=tools,

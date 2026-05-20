@@ -72,17 +72,45 @@ def _inspect_langgraph_object(agent: Any) -> tuple[int, bool, bool, bool]:
         node_count = len(nodes)
 
         edges = getattr(graph, "edges", []) or []
-        seen_targets: set[str] = set()
+        adjacency: dict[str, list[str]] = {}
         for edge in edges:
             src = getattr(edge, "source", None)
             tgt = getattr(edge, "target", None)
-            conditional = getattr(edge, "conditional", False)
-            if conditional:
+            # LangGraph exposes conditional edges via data attribute or bool flag
+            data = getattr(edge, "data", None)
+            is_conditional = bool(
+                getattr(edge, "conditional", False)
+                or callable(data)
+                or isinstance(data, str) and data
+            )
+            if is_conditional:
                 has_conditional = True
-            if tgt in seen_targets or (src == tgt):
-                has_loops = True
             if src is not None:
-                seen_targets.add(src)
+                adjacency.setdefault(src, [])
+                if tgt is not None:
+                    adjacency[src].append(tgt)
+
+        # DFS back-edge detection (proper cycle check)
+        visited: set[str] = set()
+        in_stack: set[str] = set()
+
+        def _dfs(node: str) -> bool:
+            visited.add(node)
+            in_stack.add(node)
+            for neighbour in adjacency.get(node, []):
+                if neighbour not in visited:
+                    if _dfs(neighbour):
+                        return True
+                elif neighbour in in_stack:
+                    return True
+            in_stack.discard(node)
+            return False
+
+        for start in list(adjacency):
+            if start not in visited:
+                if _dfs(start):
+                    has_loops = True
+                    break
     except Exception:
         pass
 

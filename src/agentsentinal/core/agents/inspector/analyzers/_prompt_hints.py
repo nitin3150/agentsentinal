@@ -1,7 +1,7 @@
 """Hardcoded keyword lists used by the prompt analyzer. Kept separate to keep
 prompt.py under the per-file line budget."""
 
-CONSTRAINT_KEYWORDS = ["MUST", "NEVER", "ALWAYS", "DO NOT", "PROHIBITED", "REQUIRED"]
+CONSTRAINT_KEYWORDS = ["must", "never", "always", "do not", "prohibited", "required"]
 
 AMBIGUOUS_PHRASES = [
     "as needed",

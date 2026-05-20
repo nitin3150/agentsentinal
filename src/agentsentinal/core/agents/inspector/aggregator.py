@@ -35,9 +35,9 @@ def aggregate(
         "system_prompt": extraction.system_prompt,
         "tool_definitions": list(extraction.tool_definitions),
         "framework": extraction.framework,
+        "source_object": extraction.source_object,
         "warnings": list(extraction.warnings),
         "extraction_confidence": extraction.confidence,
-        "extraction_warnings": list(extraction.warnings),
     }
 
     if prompt is not None:

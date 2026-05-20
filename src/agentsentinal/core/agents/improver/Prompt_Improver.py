@@ -102,8 +102,7 @@ class FixAmbiguousInstructions(dspy.Signature):
     """
     The system prompt contains vague, unmeasurable instructions.
     Replace every ambiguous phrase with a concrete, verifiable rule.
-    If no output format is defined, add one (JSON schema, markdown sections,
-    or a fixed sentence count).
+    If no output format is defined then make it human readable text.
 
     Good replacements:
       'be concise'         → 'limit responses to 3 sentences unless the user explicitly requests detail'
