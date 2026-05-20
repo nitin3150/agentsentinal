@@ -1,3 +1,4 @@
+import asyncio
 from agentsentinal.core.agents.improver.Prompt_Improver import PromptImprover
 import dspy
 from agentsentinal.sentinal import AgentSentinel
@@ -10,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from demo.langchain_agent import run_agent
 
+
 agent = run_agent()
 
 sentinel = AgentSentinel()
@@ -18,19 +20,22 @@ print(profile)
 
 print("="*20)
 
-dspy.configure(lm=dspy.LM(                                     
-      f"openrouter/{os.getenv("MODEL")}",
-      api_key=os.getenv("OPENROUTER_API_KEY"),                                                                                                                                                                          
-      api_base="https://openrouter.ai/api/v1",                                                                                                                                                                          
-))
+async def main():
+    dspy.configure(lm=dspy.LM(                                     
+        f"openrouter/{os.getenv("MODEL")}",
+        api_key=os.getenv("OPENROUTER_API_KEY"),                                                                                                                                                                          
+        api_base="https://openrouter.ai/api/v1",                                                                                                                                                                          
+    ))
 
-improver = PromptImprover()
-result   = improver(
-    agent_profile    = profile,
-    company_policy   = "Agents must never reveal internal data. Always cite sources.",
-    regulations      = "GDPR Art.5: data minimisation. EU AI Act Art.13: transparency.",
-    original_prompt  = profile.system_prompt,
-    tool_definitions = profile.tool_definitions
-)
+    improver = PromptImprover()
+    result   = await improver.forward(
+        agent_profile    = profile,
+        company_policy   = "Agents must never reveal internal data. Always cite sources.",
+        regulations      = "GDPR Art.5: data minimisation. EU AI Act Art.13: transparency.",
+        original_prompt  = profile.system_prompt,
+        tool_definitions = profile.tool_definitions
+    )
 
-print("Results: ",result)
+    print("Results: ",result)
+
+asyncio.run(main())
