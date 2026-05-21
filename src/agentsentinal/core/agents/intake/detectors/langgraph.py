@@ -1,7 +1,9 @@
-import functools
 import inspect
 from agentsentinal.models import AgentProfile
 from typing import Optional, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 SKIP_NODES = {'__start__', '__end__'}
 
@@ -35,11 +37,13 @@ class LangGraphDetector:
         if isinstance(val, str) and len(val) > min_len:
             return val
         # BaseMessage (SystemMessage etc.) with .content
-        if hasattr(val, 'content') and isinstance(val.content, str) and len(val.content) > min_len:
-            return val.content
+        content = getattr(val, 'content', None)
+        if isinstance(content, str) and len(content) > min_len:
+            return content
         # ChatPromptTemplate — has .messages list of MessagePromptTemplate
-        if hasattr(val, 'messages') and isinstance(val.messages, (list, tuple)):
-            for msg_tpl in val.messages:
+        messages = getattr(val, 'messages', None)
+        if isinstance(messages, (list, tuple)):
+            for msg_tpl in messages:
                 if hasattr(msg_tpl, 'prompt') and hasattr(msg_tpl.prompt, 'template'):
                     tmpl = msg_tpl.prompt.template
                     if isinstance(tmpl, str) and len(tmpl) > min_len:
@@ -181,7 +185,7 @@ class LangGraphDetector:
 
     # ── Main extraction ───────────────────────────────────────────────────────
 
-    def _extract_from_node(self, node: Any) -> Optional[str]:
+    def _extract_from_node(self, node: Any,) -> Optional[str]:
         """Try to extract a system prompt from a single node, recursing into subgraphs."""
         if hasattr(node, 'nodes'):
             sub = LangGraphDetector(node)
@@ -219,8 +223,10 @@ class LangGraphDetector:
         if model_node is not None:
             prompt = self._extract_from_node(model_node)
             if prompt:
+                logger.info("System prompt extracted from agent")
                 result.system_prompt = prompt
             else:
+                logger.error("System prompt not found in agent closure")
                 result.warnings.append('System prompt not found in closure')
         else:
             # 2. Scan all non-skip, non-tools nodes
@@ -239,8 +245,10 @@ class LangGraphDetector:
         if tools_node is not None:
             tools = self._extract_tool_definitions(tools_node)
             if tools:
+                logger.info("Tools found: %d", len(tools))
                 result.tool_definitions = tools
             else:
+                logger.error("Tools node present but no tools extracted")
                 result.warnings.append('No tools found')
         else:
             bound = self._extract_bound_tools(nodes)
