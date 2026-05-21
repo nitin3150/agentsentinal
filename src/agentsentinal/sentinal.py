@@ -1,29 +1,79 @@
 import asyncio
-
+import concurrent.futures
+from typing import TypedDict, Any, Optional
+from langgraph.graph import StateGraph, START,END
 from agentsentinal.core.agents.inspector import InspectorAgent
-from agentsentinal.intake.agent_intake import AgentIntake
-from agentsentinal.models.agent import InspectedAgentProfile
+from agentsentinal.core.agents.intake.agent_intake import AgentIntake
+from agentsentinal.models.agent import InspectedAgentProfile, AgentProfile
+from agentsentinal.core.agents.improver.Prompt_Improver import PromptImprover
+import logging
 
+logger = logging.getLogger(__name__)
+
+class SentinelState(TypedDict):
+    agent: Any
+    agent_profile: Optional[AgentProfile]
+    inspected_profile: Optional[InspectedAgentProfile]
+    # improved_profile: Optional[] 
 
 class AgentSentinel:
     def __init__(self):
         self._intake = AgentIntake()
         self._inspector = InspectorAgent()
+        self._improver = PromptImprover()
+        self._workflow = self._build_workflow()
+    
+    def _build_workflow(self):
+        builder = StateGraph(SentinelState)
 
-    def inspect_agent(self, agent,agenda:str="",system_prompt:str="") -> InspectedAgentProfile:
-        profile = self._intake.extract_profile(agent)
-        profile.source_object = agent
+        builder.add_node("intake", self._intake_node)
+        builder.add_node("inspector", self._inspector_node)
+
+        builder.add_edge(START, "intake")
+        builder.add_edge("intake", "inspector")
+        builder.add_edge("inspector", END)
+
+        return builder.compile()
+
+    def _intake_node(self, state: SentinelState) -> dict:
+        logger.info("Starting Agent Profiling....")
+        profile = self._intake.extract_profile(
+            state["agent"],
+            state["agent_profile"]
+            )
+        profile.source_object = state["agent"]
+        logger.info("Profile: %s", profile)
+        return {"agent_profile": profile}
+    
+    async def _inspector_node(self, state: SentinelState) -> dict:
+        if state["agent_profile"] is None:
+            raise ValueError("intake node must run before inspector")
+        inspected_profile = await self._inspector.inspect(state["agent_profile"])
+        return {"inspected_profile": inspected_profile}
+
+    def _invoke(self, initial_state: SentinelState) -> SentinelState:
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
 
         if loop is not None and loop.is_running():
-            # Already inside an event loop (Jupyter, FastAPI, etc.) — schedule as
-            # a coroutine and block via a new thread so we don't nest loops.
-            import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(asyncio.run, self._inspector.inspect(profile))
-                return future.result()
+                future = pool.submit(asyncio.run, self._workflow.ainvoke(initial_state))
+                return future.result() # type: ignore[return-value]
 
-        return asyncio.run(self._inspector.inspect(profile))
+        return asyncio.run(self._workflow.ainvoke(initial_state)) # type: ignore[return-value]
+
+    def _inital_state(self, agent:Any, domain: str = "", system_prompt:str = "") -> SentinelState:
+        return {
+            "agent": agent,
+            "agent_profile": AgentProfile(
+                domain = domain,
+                system_prompt = system_prompt,
+            ),
+            "inspected_profile":None,
+        }
+
+    def inspect_agent(self, agent, domain: str = "", system_prompt: str = "") -> InspectedAgentProfile:
+        result = self._invoke(self._inital_state(agent, domain=domain, system_prompt=system_prompt))
+        return result["inspected_profile"]  # type: ignore[return-value]
