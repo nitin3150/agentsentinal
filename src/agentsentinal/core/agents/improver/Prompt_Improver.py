@@ -35,13 +35,17 @@ Usage:
     print(result.change_log)
 """
 from __future__ import annotations
+from concurrent.futures import ThreadPoolExecutor
+from unittest import result
 from agentsentinal.models.agent import InspectedAgentProfile
 
 
 import asyncio
 import re
+import json
 from dataclasses import dataclass, field
 from typing import Any
+from concurrent.futures import ThreadPoolExecutor
 
 import dspy
 
@@ -218,7 +222,19 @@ class FixToolQuality(dspy.Signature):
     improved_description: str       = dspy.OutputField(desc="Complete rewritten tool description")
     improved_parameters:  str       = dspy.OutputField(desc="Parameter block in JSON-schema format with types and descriptions")
 
+class MergePromptSections(dspy.Signature):
+    """
+    Multiple versions of the same prompt have each been improved
+    to fic a different risk in isolation. Merge them into one coherent prompt that:
+    1. Includes every fix from every partial prompt
+    2. Does not duplicate any section
+    3. Does not contradict any fix
+    4. reads naturally as a single unified prompt 
+    """
 
+    original_prompt:    str        = dspy.InputField(desc="The prompt before any fixes.")
+    partial_prompts:    list[str]  = dspy.InputField(desc="List of independently fixed prompt versions.")
+    merged_prompt:      str        = dspy.OutputField(desc="Single unified prompt incorporating all fixes.")
 # ─────────────────────────────────────────────────────────────────────────────
 # 2.  RESULT DATACLASS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -312,8 +328,10 @@ class PromptImprover(dspy.Module):
         self.fix_persona       = dspy.ChainOfThought(FixPersonaDrift)
         self.fix_memory        = dspy.ChainOfThought(FixMemoryRisk)
         self.fix_tool          = dspy.ChainOfThought(FixToolQuality)
+        self.merge_prompts    = dspy.ChainOfThought(MergePromptSections)
+    
 
-    def forward(
+    async def forward(
         self,
         agent_profile:    InspectedAgentProfile,
         company_policy:   str = "",
@@ -326,6 +344,7 @@ class PromptImprover(dspy.Module):
         change_log: list[str] = []
 
         # ── Prompt fixes (order matters — each step feeds the next) ───────────
+        # Running InjectionVulnerable and PersonaDrift first for foundation sequentially
 
         if _has_flag(agent_profile, RiskCategory.INJECTION_VULNERABLE):
             r = _safe_call(
@@ -345,46 +364,78 @@ class PromptImprover(dspy.Module):
             if r:
                 prompt = r.improved_prompt
                 change_log.append(f"[PERSONA_DRIFT] {r.persona_section}")
+        
+        #Running rest in parallel
+
+        async def run_fix(fix_fn, label, **kwargs):
+            """Run a DSPy fix in a thread since DSPy is synchronous."""
+            loop = asyncio.get_event_loop()
+            with ThreadPoolExecutor() as pool:
+                result = await loop.run_in_executor(pool, lambda: _safe_call(fix_fn, label, change_log, **kwargs))
+            return label, result
+        
+        parallel_tasks = []
+            
 
         if _has_flag(agent_profile, RiskCategory.CONSTRAINT_MISSING):
-            r = _safe_call(
-                self.fix_constraints, "CONSTRAINT_MISSING", change_log,
+            parallel_tasks.append(run_fix(
+                self.fix_constraints, "CONSTRAINT_MISSING",
                 original_prompt = prompt,
                 company_policy  = company_policy,
                 regulations     = regulations,
-            )
-            if r:
-                prompt = r.improved_prompt
-                change_log.append(f"[CONSTRAINT_MISSING] {r.added_constraints}")
+            ))
 
         if _has_flag(agent_profile, RiskCategory.AMBIGUOUS_INSTRUCTIONS):
-            r = _safe_call(
-                self.fix_ambiguity, "AMBIGUOUS_INSTRUCTIONS", change_log,
+            parallel_tasks.append(run_fix(
+                self.fix_ambiguity, "AMBIGUOUS_INSTRUCTIONS", 
                 original_prompt   = prompt,
                 ambiguous_phrases = agent_profile.ambiguous_phrases,
-            )
-            if r:
-                prompt = r.improved_prompt
-                change_log.append(f"[AMBIGUOUS_INSTRUCTIONS] {r.replacements_made}")
-
+            ))
         if _has_flag(agent_profile, RiskCategory.SCOPE_OVERFLOW):
-            r = _safe_call(
-                self.fix_scope, "SCOPE_OVERFLOW", change_log,
+            parallel_tasks.append(run_fix(
+                self.fix_scope, "SCOPE_OVERFLOW",
                 original_prompt = prompt,
                 company_policy  = company_policy,
-            )
-            if r:
-                prompt = r.improved_prompt
-                change_log.append(f"[SCOPE_OVERFLOW] {r.scope_clause}")
+            ))
 
         if _has_flag(agent_profile, RiskCategory.HALLUCINATION_PRONE):
-            r = _safe_call(
-                self.fix_hallucination, "HALLUCINATION_PRONE", change_log,
+            parallel_tasks.append(run_fix(
+                self.fix_hallucination, "HALLUCINATION_PRONE",
                 original_prompt = prompt,
-            )
-            if r:
-                prompt = r.improved_prompt
-                change_log.append(f"[HALLUCINATION_PRONE] {r.added_rules}")
+            ))
+
+        # if _has_flag(agent_profile, RiskCategory.MEMORY_RISK):
+        #     r = _safe_call(
+        #         self.fix_memory, "MEMORY_RISK", change_log,
+        #         original_prompt = prompt,
+        #         memory_risks    = agent_profile.memory_risks,
+        #         company_policy  = company_policy,
+        #         regulations     = regulations,
+        #     )
+        #     if r:
+        #         prompt = r.improved_prompt
+        #         change_log.append(f"[MEMORY_RISK] {r.added_rules}")
+        
+        #run all parallel fixes concurrently
+        parallel_results = await asyncio.gather(*parallel_tasks)
+
+        # --- Merge parallel results ------------------------------------
+
+        if parallel_results:
+            partial_prompts = []
+            for label, r in parallel_results:
+                if r:
+                    partial_prompts.append(r.improved_prompt)
+                    change_log.append(f"[{label}] Applied.")
+            
+            if partial_prompts:
+                prompt = await self._merge_prompts(
+                    original_prompt = prompt,
+                    partial_prompts  = partial_prompts,
+                    change_log       = change_log,
+                ) # type: ignore
+        
+        # memory fix
 
         if _has_flag(agent_profile, RiskCategory.MEMORY_RISK):
             r = _safe_call(
@@ -400,35 +451,47 @@ class PromptImprover(dspy.Module):
 
         # ── Tool fixes ───────────────────────────────────────────────────────
 
-        improved_tools: list[dict] = []
+        # improved_tools: list[dict] = []
 
-        if _has_flag(agent_profile, RiskCategory.TOOL_QUALITY_LOW):
-            low_quality = {t.name: t for t in _low_quality_tools(agent_profile)}
+        # if _has_flag(agent_profile, RiskCategory.TOOL_QUALITY_LOW):
+        #     low_quality = {t.name: t for t in _low_quality_tools(agent_profile)}
 
-            for tool_def in tool_definitions:
-                name = tool_def.get("name", "")
+        #     for tool_def in tool_definitions:
+        #         name = tool_def.get("name", "")
 
-                if name not in low_quality:
-                    improved_tools.append(tool_def)
-                    continue
+        #         if name not in low_quality:
+        #             improved_tools.append(tool_def)
+        #             continue
 
-                tool_profile = low_quality[name]
-                r = _safe_call(
-                    self.fix_tool, "TOOL_QUALITY_LOW", change_log,
-                    tool_name            = name,
-                    original_description = tool_def.get("description", ""),
-                    missing_fields       = tool_profile.missing_fields,
-                )
-                if r:
-                    improved_tools.append({**tool_def, "description": r.improved_description})
-                    change_log.append(
-                        f"[TOOL_QUALITY_LOW] '{name}' rewritten "
-                        f"(was {tool_profile.quality_score}/10)."
-                    )
-                else:
-                    improved_tools.append(tool_def)  # keep original if fix failed
-        else:
-            improved_tools = list(tool_definitions)
+        #         tool_profile = low_quality[name]
+        #         r = _safe_call(
+        #             self.fix_tool, "TOOL_QUALITY_LOW", change_log,
+        #             tool_name            = name,
+        #             original_description = tool_def.get("description", ""),
+        #             missing_fields       = tool_profile.missing_fields,
+        #         )
+        #         if r:
+        #             improved_tools.append({
+        #                 **tool_def,
+        #                 "description": r.improved_description,
+        #                 "parameters": {"properties": json.loads(r.improved_parameters)}
+        #             })
+        #             change_log.append(
+        #                 f"[TOOL_QUALITY_LOW] '{name}' rewritten "
+        #                 f"(was {tool_profile.quality_score}/10)."
+        #             )
+        #         else:
+        #             improved_tools.append(tool_def)  # keep original if fix failed
+        # else:
+        #     improved_tools = list(tool_definitions)
+
+        # Tool fixes in parallel
+
+        improved_tools = await self._fix_tools_parallel(
+            tool_definitions = tool_definitions,
+            agent_profile    = agent_profile,
+            change_log       = change_log,
+        )
 
         # ── Policy guard ─────────────────────────────────────────────────────
 
@@ -442,6 +505,89 @@ class PromptImprover(dspy.Module):
             policy_violations         = violations,
         )
 
+    async def _merge_prompts(
+            self,
+            original_prompt: str,
+            partial_prompts: list[str],
+            change_log: list[str],
+    ) -> str:
+        """
+        Merge multple independently-fixed prompts into one coherent system prompt.
+        Each partial_prompt fixed a different risk in isolation - the merger
+        reconciles them without duplicating content or creating contradictions.
+        """
+
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor() as pool:
+            result = await loop.run_in_executor(
+                pool,
+                lambda: _safe_call(
+                    self.merge_prompts, "MERGE", change_log,
+                    original_prompt = original_prompt,
+                    partial_prompts = partial_prompts,
+                )
+            )
+        if result:
+            change_log.append("[MERGE] Parallel fixes merged successfully.")
+            return result.merged_prompt
+        else:
+            #Fallback: just use the last successful partial fix
+            change_log.append("[MERGE] Failed to merge parallel fixes, using last successful fix.")
+            return partial_prompts[-1]
+
+    async def _fix_tools_parallel(
+        self,
+        tool_definitions: list[dict],
+        agent_profile:    InspectedAgentProfile,
+        change_log:       list[str],
+    ) -> list[dict]:
+        """
+        Fix all low-quality tools concurrently.
+        """
+        if not _has_flag(agent_profile, RiskCategory.TOOL_QUALITY_LOW):
+            return list(tool_definitions)
+        
+        _low_quality = {t.name: t for t in _low_quality_tools(agent_profile)}
+
+        async def fix_one_tool(tool_def: dict) -> dict:
+            name = tool_def.get("name", "")
+            if name not in _low_quality:
+                return tool_def
+            
+            tool_profile = _low_quality[name]
+            loop = asyncio.get_event_loop()
+            with ThreadPoolExecutor() as pool:
+                r = await loop.run_in_executor(
+                    pool,
+                    lambda: _safe_call(
+                        self.fix_tool, f"TOOL_QUALITY_LOW:{name}", change_log,
+                        tool_name            = name,
+                        original_description = tool_def.get("description", ""),
+                        missing_fields       = tool_profile.missing_fields,
+                    )
+                )
+            
+            if r:
+                change_log.append(
+                    f"[TOOL_QUALITY_LOW] '{name}' rewritten "
+                    f"(was {tool_profile.quality_score}/10)."
+                )
+                try:
+                    return {
+                        **tool_def,
+                        "description": r.improved_description,
+                        "parameters": {"properties": json.loads(r.improved_parameters)}
+                    }
+                except json.JSONDecodeError:
+                    change_log.append(
+                        f"[TOOL_QUALITY_LOW] '{name}' parameter JSON invalid, keeping original parameters."
+                    )
+                    return {
+                        **tool_def,
+                        "description": r.improved_description,
+                    }
+            return tool_def
+        return list(await asyncio.gather(*[fix_one_tool(t) for t in tool_definitions]))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4.  POLICY GUARD
@@ -601,7 +747,7 @@ def build_optimized_improver(
 
     # Bind policy context so the optimiser doesn't need to pass it per-call
     class BoundImprover(PromptImprover):
-        def forward(
+        async def forward(
             self,
             agent_profile:    InspectedAgentProfile,
             company_policy:   str = "",
@@ -609,18 +755,17 @@ def build_optimized_improver(
             original_prompt:  str = "",
             tool_definitions: list[dict] = [],
         ) -> ImprovementResult:
-            return super().forward(
+            return await super().forward(
                 agent_profile    = agent_profile,
                 company_policy   = company_policy or _bound_policy,
                 regulations      = regulations or _bound_regs,
                 original_prompt  = original_prompt,
                 tool_definitions = tool_definitions,
             )
-
     optimizer = dspy.BootstrapFewShot(
         metric                 = metric,
         max_bootstrapped_demos = 4,
         max_labeled_demos      = 2,
     )
-
-    return optimizer.compile(BoundImprover(), trainset=trainset)
+    compiled: Any = optimizer.compile(BoundImprover(), trainset=trainset)
+    return compiled
