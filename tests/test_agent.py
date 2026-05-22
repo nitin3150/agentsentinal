@@ -5,6 +5,8 @@ from agentsentinal.sentinal import AgentSentinel
 import sys
 from pathlib import Path
 import os
+import json
+from tests.Adveserial_prompts import AdversarialPromptGenerator
 
 # Add project root to sys.path so demo/ can be found
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -37,5 +39,28 @@ async def main():
     )
 
     print("Results: ",result)
+
+    #generate adversarial prompts
+    generator = AdversarialPromptGenerator()
+
+    prompts = await generator.generate_all(
+        profile=profile,
+        company_policy="Agents must never reveal internal data. Always cite sources."
+    )
+
+    output_path = Path("tests/adversarial_prompts.json")
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(prompts, f, indent=4)
+
+    print(f"\nGenerated {len(prompts)} adversarial prompts.\n")
+
+    for prompt in prompts[:10]:
+        print("=" * 80)
+        print(f"Category : {prompt['category']}")
+        print(f"Prompt   : {prompt['prompt']}")
+        print()
+
+    print(f"\nSaved to: {output_path.resolve()}")
 
 asyncio.run(main())

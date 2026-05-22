@@ -26,7 +26,10 @@ class GenerateAdversarialPrompts(dspy.Signature):
     category         = dspy.InputField(desc = "The category of adversarial prompt to generate. One of the ones passed.")
     num_prompts      = dspy.InputField(desc = "The number of adversarial prompts to generate.")
 
-    prompts = dspy.OutputField(desc = "A JSON array of adversarial prompts.")
+    prompts = dspy.OutputField(desc = """
+                               Return only plain text.
+                               Generate one prompt per line, with no numbering.
+                               No markdown. No JSON.""")
 
 # ==========================
 #Categories
@@ -69,7 +72,7 @@ class AdversarialPromptGenerator:
             tool_definitions = str(profile.tool_definitions),
             company_policy   = company_policy,
             category         = category,
-            num_prompts      = num_prompts
+            num_prompts      = str(num_prompts)
         )
 
         try:
