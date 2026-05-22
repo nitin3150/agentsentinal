@@ -5,6 +5,8 @@ from agentsentinal.sentinal import AgentSentinel
 import sys
 from pathlib import Path
 import os
+import json
+from tests.Adveserial_prompts import AdversarialPromptGenerator
 
 # Add project root to sys.path so demo/ can be found
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -25,19 +27,45 @@ print(profile)
 
 print("="*20)
 
-dspy.configure(lm=dspy.LM(                                     
-      f"openrouter/{os.getenv("MODEL")}",
-      api_key=os.getenv("OPENROUTER_API_KEY"),                                                                                                                                                                          
-      api_base="https://openrouter.ai/api/v1",                                                                                                                                                                          
-))
+async def main():
+    dspy.configure(lm=dspy.LM(                                     
+        f"openrouter/{os.getenv("MODEL")}",
+        api_key=os.getenv("OPENROUTER_API_KEY"),                                                                                                                                                                          
+        api_base="https://openrouter.ai/api/v1",                                                                                                                                                                          
+    ))
 
-improver = PromptImprover()
-result   = improver(
-    agent_profile    = profile,
-    company_policy   = "Agents must never reveal internal data. Always cite sources.",
-    regulations      = "GDPR Art.5: data minimisation. EU AI Act Art.13: transparency.",
-    original_prompt  = profile.system_prompt,
-    tool_definitions = profile.tool_definitions
-)
+    improver = PromptImprover()
+    result   = await improver.forward(
+        agent_profile    = profile,
+        company_policy   = "Agents must never reveal internal data. Always cite sources.",
+        regulations      = "GDPR Art.5: data minimisation. EU AI Act Art.13: transparency.",
+        original_prompt  = profile.system_prompt,
+        tool_definitions = profile.tool_definitions
+    )
 
-print("Results: ",result)
+    print("Results: ",result)
+
+    #generate adversarial prompts
+    generator = AdversarialPromptGenerator()
+
+    prompts = await generator.generate_all(
+        profile=profile,
+        company_policy="Agents must never reveal internal data. Always cite sources."
+    )
+
+    output_path = Path("tests/adversarial_prompts.json")
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(prompts, f, indent=4)
+
+    print(f"\nGenerated {len(prompts)} adversarial prompts.\n")
+
+    for prompt in prompts[:10]:
+        print("=" * 80)
+        print(f"Category : {prompt['category']}")
+        print(f"Prompt   : {prompt['prompt']}")
+        print()
+
+    print(f"\nSaved to: {output_path.resolve()}")
+
+asyncio.run(main())
