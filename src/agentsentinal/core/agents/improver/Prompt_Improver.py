@@ -106,8 +106,7 @@ class FixAmbiguousInstructions(dspy.Signature):
     """
     The system prompt contains vague, unmeasurable instructions.
     Replace every ambiguous phrase with a concrete, verifiable rule.
-    If no output format is defined, add one (JSON schema, markdown sections,
-    or a fixed sentence count).
+    If no output format is defined, make it human readable.
 
     Good replacements:
       'be concise'         → 'limit responses to 3 sentences unless the user explicitly requests detail'
@@ -282,7 +281,7 @@ def _safe_call(fn, label: str, change_log: list[str], **kwargs):
         result = fn(**kwargs)
 
         # Some reasoning models return an object whose output fields are None
-        # even though no exception was raised — catch that here too.
+        # even though no exception was raised catch that here too.
         for field_name, field_value in vars(result).items():
             if field_name.startswith("_"):
                 continue
@@ -405,19 +404,6 @@ class PromptImprover(dspy.Module):
                 original_prompt = prompt,
             ))
 
-        # if _has_flag(agent_profile, RiskCategory.MEMORY_RISK):
-        #     r = _safe_call(
-        #         self.fix_memory, "MEMORY_RISK", change_log,
-        #         original_prompt = prompt,
-        #         memory_risks    = agent_profile.memory_risks,
-        #         company_policy  = company_policy,
-        #         regulations     = regulations,
-        #     )
-        #     if r:
-        #         prompt = r.improved_prompt
-        #         change_log.append(f"[MEMORY_RISK] {r.added_rules}")
-        
-        #run all parallel fixes concurrently
         parallel_results = await asyncio.gather(*parallel_tasks)
 
         # --- Merge parallel results ------------------------------------
@@ -451,40 +437,6 @@ class PromptImprover(dspy.Module):
                 change_log.append(f"[MEMORY_RISK] {r.added_rules}")
 
         # ── Tool fixes ───────────────────────────────────────────────────────
-
-        # improved_tools: list[dict] = []
-
-        # if _has_flag(agent_profile, RiskCategory.TOOL_QUALITY_LOW):
-        #     low_quality = {t.name: t for t in _low_quality_tools(agent_profile)}
-
-        #     for tool_def in tool_definitions:
-        #         name = tool_def.get("name", "")
-
-        #         if name not in low_quality:
-        #             improved_tools.append(tool_def)
-        #             continue
-
-        #         tool_profile = low_quality[name]
-        #         r = _safe_call(
-        #             self.fix_tool, "TOOL_QUALITY_LOW", change_log,
-        #             tool_name            = name,
-        #             original_description = tool_def.get("description", ""),
-        #             missing_fields       = tool_profile.missing_fields,
-        #         )
-        #         if r:
-        #             improved_tools.append({
-        #                 **tool_def,
-        #                 "description": r.improved_description,
-        #                 "parameters": {"properties": json.loads(r.improved_parameters)}
-        #             })
-        #             change_log.append(
-        #                 f"[TOOL_QUALITY_LOW] '{name}' rewritten "
-        #                 f"(was {tool_profile.quality_score}/10)."
-        #             )
-        #         else:
-        #             improved_tools.append(tool_def)  # keep original if fix failed
-        # else:
-        #     improved_tools = list(tool_definitions)
 
         # Tool fixes in parallel
 
