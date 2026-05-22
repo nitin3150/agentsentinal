@@ -25,6 +25,7 @@ class AgentSentinel:
     
     def _build_workflow(self):
         builder = StateGraph(SentinelState)
+        print(builder)
 
         builder.add_node("intake", self._intake_node)
         builder.add_node("inspector", self._inspector_node)
@@ -42,7 +43,7 @@ class AgentSentinel:
             state["agent_profile"]
             )
         profile.source_object = state["agent"]
-        logger.info("Profile: %s", profile)
+        logger.info("Profile: %s", profile.to_log_str())
         return {"agent_profile": profile}
     
     async def _inspector_node(self, state: SentinelState) -> dict:
@@ -74,6 +75,6 @@ class AgentSentinel:
             "inspected_profile":None,
         }
 
-    def inspect_agent(self, agent, domain: str = "", system_prompt: str = "") -> InspectedAgentProfile:
+    def run(self, agent, domain: str = "", system_prompt: str = "") -> InspectedAgentProfile:
         result = self._invoke(self._inital_state(agent, domain=domain, system_prompt=system_prompt))
         return result["inspected_profile"]  # type: ignore[return-value]

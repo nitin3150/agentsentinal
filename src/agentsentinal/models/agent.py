@@ -51,6 +51,23 @@ class AgentProfile(BaseModel):
 
     model_config = {"arbitrary_types_allowed": True}
 
+    def to_log_str(self) -> str:
+        tools = self.tool_definitions
+        tool_lines = "\n".join(
+            f"    • {t.get('name', '?')} — {t.get('description', 'no description')}"
+            for t in tools
+        ) or "    (none)"
+        warnings = ", ".join(self.warnings) if self.warnings else "none"
+        src = type(self.source_object).__name__ if self.source_object else "none"
+        return (
+            f"\n  domain        : {self.domain or '(unset)'}"
+            f"\n  framework     : {self.framework}"
+            f"\n  system_prompt : {self.system_prompt or '(unset)'}"
+            f"\n  tools ({len(tools)})     :\n{tool_lines}"
+            f"\n  warnings      : {warnings}"
+            f"\n  source        : {src}"
+        )
+
 
 class InspectedAgentProfile(AgentProfile):
     """Extended profile produced by InspectorAgent after full static + semantic analysis."""
