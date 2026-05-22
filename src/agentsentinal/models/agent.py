@@ -42,7 +42,8 @@ class ToolProfile(BaseModel):
 
 
 class AgentProfile(BaseModel):
-    system_prompt: str
+    domain: str = ""
+    system_prompt: str = ""
     tool_definitions: List[dict] = Field(default_factory=list)
     framework: Any = "unknown"
     warnings: list[str] = Field(default_factory=list)

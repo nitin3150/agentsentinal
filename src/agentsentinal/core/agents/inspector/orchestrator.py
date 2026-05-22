@@ -24,7 +24,7 @@ from agentsentinal.core.agents.inspector.analyzers.tools import (
     ToolsAnalysis,
     analyze_tools,
 )
-from agentsentinal.intake.types import ExtractionResult
+from agentsentinal.core.agents.intake.types import ExtractionResult
 from agentsentinal.models import AgentProfile
 
 

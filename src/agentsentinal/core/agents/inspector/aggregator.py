@@ -6,7 +6,7 @@ from agentsentinal.core.agents.inspector.analyzers.memory import MemoryAnalysis
 from agentsentinal.core.agents.inspector.analyzers.prompt import PromptAnalysis
 from agentsentinal.core.agents.inspector.analyzers.semantic import SemanticAnalysis
 from agentsentinal.core.agents.inspector.analyzers.tools import ToolsAnalysis
-from agentsentinal.intake.types import ExtractionResult
+from agentsentinal.core.agents.intake.types import ExtractionResult
 from agentsentinal.models import RiskFlag, RiskLevel
 
 
