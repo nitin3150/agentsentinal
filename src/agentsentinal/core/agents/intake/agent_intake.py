@@ -16,7 +16,7 @@ class AgentIntake:
             detector = DetectorClass(agent)
             if detector.can_handle():
                 result = detector()
-
+                result.system_prompt = result.system_prompt.replace("\n","").replace(".","")
                 if agent_profile and agent_profile.system_prompt:
                     if result.system_prompt and result.system_prompt != agent_profile.system_prompt:
                         logger.error(
@@ -26,6 +26,7 @@ class AgentIntake:
                             agent_profile.system_prompt,
                         )
                     result.system_prompt = agent_profile.system_prompt
+                    result.domain = agent_profile.domain
 
                 if agent_profile and agent_profile.tool_definitions:
                     result.tool_definitions = agent_profile.tool_definitions
