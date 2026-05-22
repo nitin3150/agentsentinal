@@ -17,7 +17,12 @@ from demo.langchain_agent import run_agent
 agent = run_agent()
 
 sentinel = AgentSentinel()
-profile = sentinel.inspect_agent(agent)
+profile = sentinel.inspect_agent(
+    agent,
+    # agenda="personal agent",
+    # system_prompt="....."
+    )
+
 print(profile)
 
 print("="*20)

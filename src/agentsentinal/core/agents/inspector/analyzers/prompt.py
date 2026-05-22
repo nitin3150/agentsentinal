@@ -31,11 +31,14 @@ class PromptAnalysis(BaseModel):
     risk_flags: list[RiskFlag] = Field(default_factory=list)
 
 
+_CONSTRAINT_RE = re.compile(
+    r"\b(" + "|".join(re.escape(kw) for kw in CONSTRAINT_KEYWORDS) + r")\b",
+    re.IGNORECASE,
+)
+
+
 def _count_constraints(prompt: str) -> int:
-    count = 0
-    for kw in CONSTRAINT_KEYWORDS:
-        count += len(re.findall(rf"\b{re.escape(kw)}\b", prompt))
-    return count
+    return len(_CONSTRAINT_RE.findall(prompt))
 
 
 def _find_ambiguous(prompt: str) -> list[str]:
@@ -105,7 +108,7 @@ def _build_flags(an: PromptAnalysis) -> list[RiskFlag]:
             suggestion="Specify a format (JSON schema, markdown sections, fixed sentence count) so downstream code can rely on the shape.",
         ))
 
-    if not an.has_scope_defined and an.constraint_count == 0:
+    if not an.has_scope_defined:
         flags.append(RiskFlag(
             category=RiskCategory.SCOPE_OVERFLOW,
             description="No refusal boundaries defined; the agent will attempt to answer any query, including out-of-domain or unsafe ones.",
@@ -114,7 +117,7 @@ def _build_flags(an: PromptAnalysis) -> list[RiskFlag]:
             suggestion="Add a scope clause: 'Only answer questions about <domain>. Refuse any other request with: <refusal text>.'",
         ))
 
-    if not an.has_persona_defined and an.constraint_count == 0:
+    if not an.has_persona_defined:
         flags.append(RiskFlag(
             category=RiskCategory.PERSONA_DRIFT,
             description="No explicit persona/role definition; the agent's identity will drift between sessions.",
@@ -131,7 +134,7 @@ def _build_flags(an: PromptAnalysis) -> list[RiskFlag]:
             severity=RiskLevel.HIGH,
             suggestion="Replace absolute claims with bounded ones, and add: 'If you do not have the information, say \"I do not know\" rather than guessing.'",
         ))
-    elif not an.has_uncertainty_handling and an.constraint_count == 0:
+    elif not an.has_uncertainty_handling:
         flags.append(RiskFlag(
             category=RiskCategory.HALLUCINATION_PRONE,
             description="No uncertainty-handling instruction; on unknown inputs the agent will guess rather than abstain.",

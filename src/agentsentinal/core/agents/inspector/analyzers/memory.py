@@ -66,21 +66,22 @@ def analyze_memory(agent: Any = None, source_code: Optional[str] = None) -> Memo
     memory_type = MEMORY_BACKENDS.get(backend, backend.lower())
     risks: list[str] = []
 
-    search_corpus = source_code or ""
-    lowered = search_corpus.lower()
+    if source_code:
+        # String-based checks are only meaningful when source is available.
+        # Skipping them for runtime agents avoids false-alarm flags.
+        lowered = source_code.lower()
+        has_ttl = any(h in lowered for h in TTL_HINTS)
+        stores_user_data = any(h in lowered for h in USER_DATA_HINTS)
+        has_scope = any(h in lowered for h in SCOPE_HINTS)
 
-    has_ttl = any(h in lowered for h in TTL_HINTS)
-    stores_user_data = any(h in lowered for h in USER_DATA_HINTS)
-    has_scope = any(h in lowered for h in SCOPE_HINTS)
-
-    if not has_ttl:
-        risks.append("No TTL/expiry configuration detected — unbounded memory growth + retention risk.")
-    if stores_user_data and not has_scope:
-        risks.append("Stores user-identifying data without visible scope separation — cross-user leak risk.")
-    if stores_user_data:
-        risks.append("Stores user data — review HIPAA / SOC 2 / GDPR applicability.")
-    if not has_scope:
-        risks.append("No thread_id/session_id/namespace scoping detected — sessions may share state.")
+        if not has_ttl:
+            risks.append("No TTL/expiry configuration detected — unbounded memory growth + retention risk.")
+        if stores_user_data and not has_scope:
+            risks.append("Stores user-identifying data without visible scope separation — cross-user leak risk.")
+        if stores_user_data:
+            risks.append("Stores user data — review HIPAA / SOC 2 / GDPR applicability.")
+        if not has_scope:
+            risks.append("No thread_id/session_id/namespace scoping detected — sessions may share state.")
 
     flags: list[RiskFlag] = []
     if risks:

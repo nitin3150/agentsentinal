@@ -25,14 +25,14 @@ SYSTEM_PROMPT = """
 You are a helpful assistant.
 """
 
-model = ChatOpenAI(
+chatbot = ChatOpenAI(
     model=os.getenv("MODEL","stepfun/step-3.5-flash"),
     openai_api_base=os.getenv("OPENROUTER_BASE_URL"),
     openai_api_key=os.getenv("OPENROUTER_API_KEY"),
 )
 
 agent = create_agent(
-    model=model,
+    model=chatbot,
     tools=[calculate],
     system_prompt=SYSTEM_PROMPT,
 )
