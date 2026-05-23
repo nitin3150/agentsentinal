@@ -12,8 +12,8 @@ from agentsentinal.models import RiskCategory, RiskFlag, RiskLevel
 logger = logging.getLogger(__name__)
 
 DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-# OpenRouter uses the MODEL env var; override with SEMANTIC_MODEL to pin a specific model.
-DEFAULT_OPENROUTER_MODEL = os.getenv("SEMANTIC_MODEL") or os.getenv("MODEL", "openai/gpt-4o-mini")
+_raw_groq_model = os.getenv("GRO_MODEL", "llama-3.3-70b-versatile")
+DEFAULT_GROQ_MODEL = _raw_groq_model.removeprefix("groq/")
 SEMANTIC_TIMEOUT = float(os.getenv("SEMANTIC_TIMEOUT", "30"))
 
 SEMANTIC_PROMPT = """You are an AI agent auditor. Analyse the system prompt below and return JSON only.
@@ -135,8 +135,9 @@ def _parse_payload(payload: dict) -> SemanticAnalysis:
     )
 
 
-async def _call_openrouter(rendered_prompt: str) -> Optional[str]:
-    api_key = os.getenv("OPENROUTER_API_KEY")
+async def _call_groq(rendered_prompt: str) -> Optional[str]:
+    api_key = os.getenv("GROQ_API_KEY")
+    base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
     if not api_key:
         return None
     try:
@@ -144,13 +145,10 @@ async def _call_openrouter(rendered_prompt: str) -> Optional[str]:
     except ImportError:
         return None
     try:
-        client = AsyncOpenAI(
-            api_key=api_key,
-            base_url="https://openrouter.ai/api/v1",
-        )
+        client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         response = await asyncio.wait_for(
             client.chat.completions.create(
-                model=DEFAULT_OPENROUTER_MODEL,
+                model=DEFAULT_GROQ_MODEL,
                 messages=[{"role": "user", "content": rendered_prompt}],
                 temperature=0,
             ),
@@ -158,10 +156,10 @@ async def _call_openrouter(rendered_prompt: str) -> Optional[str]:
         )
         return response.choices[0].message.content
     except asyncio.TimeoutError:
-        logger.warning("Semantic analysis (OpenRouter) timed out after %.0fs", SEMANTIC_TIMEOUT)
+        logger.warning("Semantic analysis (Groq) timed out after %.0fs", SEMANTIC_TIMEOUT)
         return None
     except Exception as exc:
-        logger.warning("Semantic analysis (OpenRouter) failed: %s: %s", type(exc).__name__, exc)
+        logger.warning("Semantic analysis (Groq) failed: %s: %s", type(exc).__name__, exc)
         return None
 
 
@@ -170,23 +168,25 @@ async def _call_gemini(rendered_prompt: str) -> Optional[str]:
     if not api_key:
         return None
     try:
-        import google.generativeai as genai  # type: ignore
+        from google import genai
     except ImportError:
         return None
 
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(DEFAULT_GEMINI_MODEL)
+        client = genai.Client(api_key=api_key)
         resp = await asyncio.wait_for(
-            model.generate_content_async(rendered_prompt),
+            client.aio.models.generate_content(
+                model=DEFAULT_GEMINI_MODEL,
+                contents=rendered_prompt,
+            ),
             timeout=SEMANTIC_TIMEOUT,
         )
-        return getattr(resp, "text", None)
+        return resp.text
     except asyncio.TimeoutError:
-        logger.warning("Semantic analysis timed out after %.0fs", SEMANTIC_TIMEOUT)
+        logger.warning("Semantic analysis (Gemini) timed out after %.0fs", SEMANTIC_TIMEOUT)
         return None
     except Exception as exc:
-        logger.warning("Semantic analysis failed: %s: %s", type(exc).__name__, exc)
+        logger.warning("Semantic analysis (Gemini) failed: %s: %s", type(exc).__name__, exc)
         return None
 
 
@@ -209,7 +209,7 @@ async def analyze_semantic(
         constraint_count=static_findings.get("constraint_count", 0),
     )
 
-    raw = await _call_openrouter(rendered) or await _call_gemini(rendered)
+    raw = await _call_groq(rendered) or await _call_gemini(rendered)
     if not raw:
         return SemanticAnalysis()
 
