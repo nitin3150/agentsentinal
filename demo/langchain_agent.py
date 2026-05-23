@@ -26,9 +26,9 @@ You are a helpful assistant.
 """
 
 chatbot = ChatOpenAI(
-    model=os.getenv("MODEL","stepfun/step-3.5-flash"),
-    openai_api_base=os.getenv("OPENROUTER_BASE_URL"),
-    openai_api_key=os.getenv("OPENROUTER_API_KEY"),
+    model=os.getenv("GROQ_MODEL","stepfun/step-3.5-flash"),
+    openai_api_base=os.getenv("GROQ_BASE_URL"),
+    openai_api_key=os.getenv("GROQ_API_KEY"),
 )
 
 agent = create_agent(

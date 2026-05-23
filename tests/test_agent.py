@@ -17,29 +17,29 @@ from demo.langchain_agent import run_agent
 agent = run_agent()
 
 sentinel = AgentSentinel()
-profile = sentinel.inspect_agent(
+profile = sentinel.inspect(
     agent,
     domain="personal agent",
-    system_prompt="You are a helpful assistant."
+    system_prompt="You are a helpful assistant"
     )
 
 # print(profile)
 
 # print("="*20)
 
-dspy.configure(lm=dspy.LM(                                     
-      f"openrouter/{os.getenv("MODEL")}",
-      api_key=os.getenv("OPENROUTER_API_KEY"),                                                                                                                                                                          
-      api_base="https://openrouter.ai/api/v1",                                                                                                                                                                          
-))
+# dspy.configure(lm=dspy.LM(                                     
+#       f"openrouter/{os.getenv("MODEL")}",
+#       api_key=os.getenv("OPENROUTER_API_KEY"),                                                                                                                                                                          
+#       api_base="https://openrouter.ai/api/v1",                                                                                                                                                                          
+# ))
 
-improver = PromptImprover()
-result   = improver(
-    agent_profile    = profile,
-    company_policy   = "Agents must never reveal internal data. Always cite sources.",
-    regulations      = "GDPR Art.5: data minimisation. EU AI Act Art.13: transparency.",
-    original_prompt  = profile.system_prompt,
-    tool_definitions = profile.tool_definitions
-)
+# improver = PromptImprover()
+# result   = improver(
+#     agent_profile    = profile,
+#     company_policy   = "Agents must never reveal internal data. Always cite sources.",
+#     regulations      = "GDPR Art.5: data minimisation. EU AI Act Art.13: transparency.",
+#     original_prompt  = profile.system_prompt,
+#     tool_definitions = profile.tool_definitions
+# )
 
-print("Results: ",result)
+# print("Results: ",result)

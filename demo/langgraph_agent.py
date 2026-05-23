@@ -8,6 +8,7 @@ load_dotenv()
 import os
 
 from typing_extensions import TypedDict
+from pydantic import SecretStr
 from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
 
@@ -15,10 +16,11 @@ SYSTEM_PROMPT = """
 You are a helpful assistant.
 """
 
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 model = ChatOpenAI(
-    model=os.getenv("MODEL","stepfun/step-3.5-flash"),
-    openai_api_base=os.getenv("OPENROUTER_BASE_URL"),
-    openai_api_key=os.getenv("OPENROUTER_API_KEY"),
+    model=os.getenv("GROQ_MODEL", "stepfun/step-3.5-flash"),
+    base_url=os.getenv("GROQ_BASE_URL"),
+    api_key=SecretStr(GROQ_API_KEY) if GROQ_API_KEY is not None else None,
 )
 
 class State(TypedDict):
