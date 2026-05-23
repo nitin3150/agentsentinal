@@ -26,7 +26,9 @@ from agentsentinal.core.agents.inspector.analyzers.tools import (
 )
 from agentsentinal.core.agents.intake.types import ExtractionResult
 from agentsentinal.models import AgentProfile
+import logging
 
+logger = logging.getLogger(__name__)
 
 CONFIDENCE_WARNING_THRESHOLD = 0.6
 
@@ -41,6 +43,7 @@ class InspectorAgent:
         self.semantic_enabled = semantic_enabled
 
     async def inspect(self, profile: AgentProfile) -> InspectedAgentProfile:
+        logger.info("Inspection Starts...")
         extraction = ExtractionResult(
             system_prompt=profile.system_prompt,
             tool_definitions=profile.tool_definitions,
@@ -50,29 +53,42 @@ class InspectorAgent:
         )
         extraction.confidence = extraction.compute_confidence()
 
+        logger.info("Extraction Confidence: %s", extraction.confidence)
+
         if extraction.confidence < CONFIDENCE_WARNING_THRESHOLD:
             extraction.warnings.append(
                 f"Low extraction confidence ({extraction.confidence:.2f}). "
                 "Pass system_prompt and tool_definitions explicitly for a more complete analysis."
             )
-
+        
         # Static analyzers are pure Python (no I/O, no GIL release) — run them
         # directly rather than via to_thread to avoid pointless thread overhead.
         try:
+            logger.info("Analysing Prompt...")
             prompt_res = analyze_prompt(extraction.system_prompt)
         except Exception as exc:
+            logger.error("Error Analysing Prompt!!")
             prompt_res = exc
+        
         try:
+            logger.info("Analysing Tools...")
             tools_res = analyze_tools(extraction.tool_definitions)
         except Exception as exc:
+            logger.error("Error Analysing Tools!!")
             tools_res = exc
+        
         try:
+            logger.info("Analysing Memory...")
             memory_res = analyze_memory(extraction.source_object, extraction.source_code)
         except Exception as exc:
+            logger.error("Error Analysing Memory!!")
             memory_res = exc
+        
         try:
+            logger.info("Analysing Framework...")
             framework_res = analyze_framework(extraction.source_object, extraction.source_code)
         except Exception as exc:
+            logger.error("Error Analysing Framework!!")
             framework_res = exc
 
         static_findings = {}
@@ -81,9 +97,12 @@ class InspectorAgent:
                 "ambiguous_phrases": prompt_res.ambiguous_phrases,
                 "constraint_count": prompt_res.constraint_count,
             }
+        
         try:
+            logger.info("Analysing Semantics...")
             semantic_res: Any = await self._run_semantic(extraction, static_findings)
         except Exception as exc:
+            logger.error("Error Analysing Semantics!!")
             semantic_res = exc
 
         prompt = _unwrap(prompt_res, PromptAnalysis, extraction, "prompt")

@@ -12,6 +12,7 @@ class AgentIntake:
         ]
 
     def extract_profile(self, agent, agent_profile: Optional[AgentProfile] = None) -> AgentProfile:
+        logger.info("Starting Agent Profiling....")
         for DetectorClass in self._detectors:
             detector = DetectorClass(agent)
             if detector.can_handle():
@@ -30,7 +31,8 @@ class AgentIntake:
 
                 if agent_profile and agent_profile.tool_definitions:
                     result.tool_definitions = agent_profile.tool_definitions
-
+                
+                logger.info("Profile: %s", result.to_log_str())
                 return result
 
         return AgentProfile(
