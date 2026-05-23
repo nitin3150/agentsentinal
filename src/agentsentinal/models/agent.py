@@ -110,7 +110,3 @@ class InspectedAgentProfile(AgentProfile):
 
     # Extraction metadata
     extraction_confidence: float = Field(ge=0.0, le=1.0, default=0.0)
-
-
-# Backwards-compat alias — remove once all callers updated
-AgentProfile1 = InspectedAgentProfile
