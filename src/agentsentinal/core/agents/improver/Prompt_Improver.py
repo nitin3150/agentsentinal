@@ -62,6 +62,9 @@ from agentsentinal.core.agents.improver.signatures import (
 
 from agentsentinal.core.agents.improver.policy_guard import PolicyGuard
 from agentsentinal.models.prompt import ImprovementResult
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
@@ -74,6 +77,23 @@ def _has_flag(profile: InspectedAgentProfile, category: RiskCategory) -> bool:
 
 def _low_quality_tools(profile: InspectedAgentProfile) -> list[ToolProfile]:
     return [t for t in profile.tool_profiles if t.quality_score < 7]
+
+
+def _fmt_result(result: "ImprovementResult") -> str:
+    violations = result.policy_violations or ["none"]
+    changes = "\n".join(f"    {i+1}. {c}" for i, c in enumerate(result.change_log)) or "    (none)"
+    tools = "\n".join(
+        f"    • {t.get('name', '?')} — {t.get('description', '')[:80]}"
+        for t in result.improved_tool_definitions
+    ) or "    (none)"
+    return (
+        f"\n  --- Improved Prompt ---"
+        f"\n  {result.improved_prompt}"
+        f"\n  --- Tools ({len(result.improved_tool_definitions)}) ---\n{tools}"
+        f"\n  --- Change Log ({len(result.change_log)}) ---\n{changes}"
+        f"\n  --- Policy Violations ---"
+        f"\n  {', '.join(violations)}"
+    )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3.  MAIN MODULE
@@ -163,11 +183,15 @@ class PromptImprover(dspy.Module):
         tool_definitions = agent_profile.tool_definitions or []
         prompt     = agent_profile.system_prompt
         change_log: list[str] = []
+        flags = [f.category.value for f in agent_profile.risk_flags]
 
-        # ── Prompt fixes (order matters — each step feeds the next) ───────────
-        # Running InjectionVulnerable and PersonaDrift first for foundation sequentially
+        logger.info("Improvement started — agent: %s | risk flags: %s",
+                    agent_profile.agent_id or "(unnamed)", flags or "(none)")
+
+        # ── Sequential: injection + persona first (foundation) ────────────────
 
         if _has_flag(agent_profile, RiskCategory.INJECTION_VULNERABLE):
+            logger.info("Fixing INJECTION_VULNERABLE...")
             r = _safe_call(
                 self.fix_injection, "INJECTION_VULNERABLE", change_log,
                 original_prompt   = prompt,
@@ -176,8 +200,12 @@ class PromptImprover(dspy.Module):
             if r:
                 prompt = r.improved_prompt
                 change_log.append(f"[INJECTION_VULNERABLE] {r.defences_added}")
+                logger.info("INJECTION_VULNERABLE fixed.")
+            else:
+                logger.warning("INJECTION_VULNERABLE skipped — see change log.")
 
         if _has_flag(agent_profile, RiskCategory.PERSONA_DRIFT):
+            logger.info("Fixing PERSONA_DRIFT...")
             r = _safe_call(
                 self.fix_persona, "PERSONA_DRIFT", change_log,
                 original_prompt = prompt,
@@ -185,8 +213,11 @@ class PromptImprover(dspy.Module):
             if r:
                 prompt = r.improved_prompt
                 change_log.append(f"[PERSONA_DRIFT] {r.persona_section}")
-        
-        #Running rest in parallel
+                logger.info("PERSONA_DRIFT fixed.")
+            else:
+                logger.warning("PERSONA_DRIFT skipped — see change log.")
+
+        # ── Parallel fixes ────────────────────────────────────────────────────
 
         async def run_fix(fix_fn, label, **kwargs):
             """Run a DSPy fix in a thread. Returns (label, result, task_log) with isolated log."""
@@ -224,26 +255,35 @@ class PromptImprover(dspy.Module):
                 original_prompt = prompt,
             ))
 
+        if parallel_tasks:
+            logger.info("Running %d parallel fix(es): %s",
+                        len(parallel_tasks),
+                        [t.__name__ if hasattr(t, '__name__') else str(i)
+                         for i, t in enumerate(parallel_tasks)])
+            logger.info("Running parallel fixes...")
+
         parallel_results = await asyncio.gather(*parallel_tasks)
 
-        # Flush per-task logs in deterministic order, then merge prompts.
         partial_prompts = []
         for label, r, task_log in parallel_results:
             change_log.extend(task_log)
             if r:
                 partial_prompts.append(r.improved_prompt)
                 change_log.append(f"[{label}] Applied.")
+                logger.info("%s fixed.", label)
+            else:
+                logger.warning("%s skipped — see change log.", label)
 
         if partial_prompts:
+            logger.info("Merging %d parallel fix(es)...", len(partial_prompts))
             prompt = await self._merge_prompts(
                 original_prompt = prompt,
                 partial_prompts = partial_prompts,
                 change_log      = change_log,
             )
-        
-        # memory fix
 
         if _has_flag(agent_profile, RiskCategory.MEMORY_RISK):
+            logger.info("Fixing MEMORY_RISK...")
             r = _safe_call(
                 self.fix_memory, "MEMORY_RISK", change_log,
                 original_prompt = prompt,
@@ -254,28 +294,37 @@ class PromptImprover(dspy.Module):
             if r:
                 prompt = r.improved_prompt
                 change_log.append(f"[MEMORY_RISK] {r.added_rules}")
+                logger.info("MEMORY_RISK fixed.")
+            else:
+                logger.warning("MEMORY_RISK skipped — see change log.")
 
-        # ── Tool fixes ───────────────────────────────────────────────────────
+        # ── Tool fixes ────────────────────────────────────────────────────────
 
-        # Tool fixes in parallel
-
+        logger.info("Fixing tool definitions...")
         improved_tools = await self._fix_tools_parallel(
             tool_definitions = tool_definitions,
             agent_profile    = agent_profile,
             change_log       = change_log,
         )
 
-        # ── Policy guard ─────────────────────────────────────────────────────
+        # ── Policy guard ──────────────────────────────────────────────────────
 
+        logger.info("Running policy guard check...")
         guard      = PolicyGuard(company_policy=policies, regulations=regulations)
         violations = guard.check(prompt)
+        if violations:
+            logger.warning("Policy violations detected: %s", violations)
+        else:
+            logger.info("Policy guard passed.")
 
-        return ImprovementResult(
+        result = ImprovementResult(
             improved_prompt           = prompt,
             improved_tool_definitions = improved_tools,
             change_log                = change_log,
             policy_violations         = violations,
         )
+        logger.info("Improvement complete: %s", _fmt_result(result))
+        return result
 
     async def _merge_prompts(
             self,
@@ -314,6 +363,7 @@ class PromptImprover(dspy.Module):
         Fix all low-quality tools concurrently.
         """
         if not _has_flag(agent_profile, RiskCategory.TOOL_QUALITY_LOW):
+            logger.info("Tool quality OK — no tool fixes needed.")
             return list(tool_definitions)
         
         _low_quality = {t.name: t for t in _low_quality_tools(agent_profile)}
@@ -333,6 +383,7 @@ class PromptImprover(dspy.Module):
             )
             
             if r:
+                logger.info("Tool '%s' rewritten (was %d/10).", name, tool_profile.quality_score)
                 change_log.append(
                     f"[TOOL_QUALITY_LOW] '{name}' rewritten "
                     f"(was {tool_profile.quality_score}/10)."
