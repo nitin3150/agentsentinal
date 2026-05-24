@@ -88,16 +88,25 @@ class AgentSentinel:
         profile = self._intake.extract_profile(agent, agent_profile)
         return self._run_async(self._inspector.inspect(profile,policies))
 
-    def improve(self, agent_profile:InspectedAgentProfile, policies:str=""):
+    def improve(self, agent_profile: InspectedAgentProfile, policies: str = ""):
+        policy_text = policies
+        if policies and os.path.isfile(policies):
+            from agentsentinal.utils.policies import parse_policy_pdf
+            try:
+                policy_text = parse_policy_pdf(policies)
+                logger.info("Policy PDF parsed for improver: %d chars", len(policy_text))
+            except Exception as exc:
+                logger.warning("Failed to parse policy PDF '%s': %s", policies, exc)
+
         dspy.configure(lm=dspy.LM(
             os.getenv("GROQ_MODEL") or "",
             api_key=os.getenv("GROQ_API_KEY"),
         ))
 
         improver = PromptImprover()
-        result   = improver(
-            agent_profile = agent_profile,
-            policies   = policies,
+        result = improver(
+            agent_profile=agent_profile,
+            policies=policy_text,
         )
         return result
     

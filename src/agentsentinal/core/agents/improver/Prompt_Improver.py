@@ -55,6 +55,7 @@ from agentsentinal.core.agents.improver.signatures import (
     FixInjectionVulnerable,
     FixMemoryRisk,
     FixPersonaDrift,
+    FixPolicyViolation,
     FixScopeOverflow,
     FixToolQuality,
     MergePromptSections,
@@ -157,8 +158,9 @@ class PromptImprover(dspy.Module):
         self.fix_injection     = dspy.ChainOfThought(FixInjectionVulnerable)
         self.fix_persona       = dspy.ChainOfThought(FixPersonaDrift)
         self.fix_memory        = dspy.ChainOfThought(FixMemoryRisk)
+        self.fix_policy        = dspy.ChainOfThought(FixPolicyViolation)
         self.fix_tool          = dspy.ChainOfThought(FixToolQuality)
-        self.merge_prompts    = dspy.ChainOfThought(MergePromptSections)
+        self.merge_prompts     = dspy.ChainOfThought(MergePromptSections)
     
 
     def __call__(self, *args, **kwargs):  # type: ignore[override]
@@ -297,6 +299,28 @@ class PromptImprover(dspy.Module):
             else:
                 logger.warning("MEMORY_RISK skipped — see change log.")
 
+        # ── Policy violation fix ──────────────────────────────────────────────
+
+        if _has_flag(agent_profile, RiskCategory.POLICY_VIOLATION) and policies:
+            logger.info("Fixing POLICY_VIOLATION...")
+            policy_violations = [
+                f.description
+                for f in agent_profile.risk_flags
+                if f.category == RiskCategory.POLICY_VIOLATION
+            ]
+            r = _safe_call(
+                self.fix_policy, "POLICY_VIOLATION", change_log,
+                original_prompt=prompt,
+                policy_text=policies[:6000],
+                violations=policy_violations,
+            )
+            if r:
+                prompt = r.improved_prompt
+                change_log.append(f"[POLICY_VIOLATION] {r.changes_made}")
+                logger.info("POLICY_VIOLATION fixed.")
+            else:
+                logger.warning("POLICY_VIOLATION skipped — see change log.")
+
         # ── Tool fixes ────────────────────────────────────────────────────────
 
         logger.info("Fixing tool definitions...")
@@ -310,7 +334,7 @@ class PromptImprover(dspy.Module):
 
         logger.info("Running policy guard check...")
         guard      = PolicyGuard(company_policy=policies, regulations=regulations)
-        violations = guard.check(prompt)
+        violations = await asyncio.to_thread(guard.check, prompt)
         if violations:
             logger.warning("Policy violations detected: %s", violations)
         else:

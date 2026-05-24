@@ -142,9 +142,36 @@ class MergePromptSections(dspy.Signature):
     1. Includes every fix from every partial prompt
     2. Does not duplicate any section
     3. Does not contradict any fix
-    4. reads naturally as a single unified prompt 
+    4. reads naturally as a single unified prompt
     """
 
     original_prompt:    str        = dspy.InputField(desc="The prompt before any fixes.")
     partial_prompts:    list[str]  = dspy.InputField(desc="List of independently fixed prompt versions.")
     merged_prompt:      str        = dspy.OutputField(desc="Single unified prompt incorporating all fixes.")
+
+
+class FixPolicyViolation(dspy.Signature):
+    """
+    The agent's system prompt violates one or more company policies.
+    Rewrite the prompt to be fully compliant while preserving the agent's
+    legitimate functionality. For each violation, either:
+      1. Remove the non-compliant instruction, or
+      2. Replace it with a compliant equivalent grounded in the policy document.
+    Do not add constraints beyond what the policy requires.
+    Do not alter the agent's intended purpose or legitimate behaviour.
+    """
+    original_prompt: str       = dspy.InputField(desc="Current system prompt (max 4000 chars)")
+    policy_text:     str       = dspy.InputField(desc="Full company policy document (max 6000 chars)")
+    violations:      list[str] = dspy.InputField(desc="Policy violations detected by the Inspector")
+    improved_prompt: str       = dspy.OutputField(desc="Policy-compliant rewritten system prompt")
+    changes_made:    str       = dspy.OutputField(desc="Bullet list: each change made and the policy clause it addresses")
+
+
+class CheckPolicyCompliance(dspy.Signature):
+    """
+    Check whether the agent system prompt violates any rule in the policy document.
+    List each violation on a new line. If the prompt is fully compliant, output exactly: COMPLIANT
+    """
+    prompt:      str = dspy.InputField(desc="Agent system prompt to validate (max 4000 chars)")
+    policy_text: str = dspy.InputField(desc="Company policy document (max 6000 chars)")
+    violations:  str = dspy.OutputField(desc="Newline-separated list of violations, or 'COMPLIANT' if none")
