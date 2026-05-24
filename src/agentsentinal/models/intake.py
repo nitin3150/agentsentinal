@@ -2,7 +2,6 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
-
 class ExtractionResult(BaseModel):
     """Normalised intake output. All extractors return this shape."""
 

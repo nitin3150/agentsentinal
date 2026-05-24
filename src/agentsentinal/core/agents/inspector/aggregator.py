@@ -7,7 +7,7 @@ from agentsentinal.core.agents.inspector.analyzers.policy import PolicyAnalysis
 from agentsentinal.core.agents.inspector.analyzers.prompt import PromptAnalysis
 from agentsentinal.core.agents.inspector.analyzers.semantic import SemanticAnalysis
 from agentsentinal.core.agents.inspector.analyzers.tools import ToolsAnalysis
-from agentsentinal.core.agents.intake.types import ExtractionResult
+from agentsentinal.models.intake import ExtractionResult
 from agentsentinal.models import RiskFlag, RiskLevel
 import logging
 
