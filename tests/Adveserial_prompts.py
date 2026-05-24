@@ -57,16 +57,32 @@ PROMPTS_PER_CATEGORY = 10
 class AdversarialPromptGenerator:
 
     def __init__(self):
-        self.generator = dspy.Predict(GenerateAdversarialPrompts)
-    
+        #fast but less reliable
+        self.generator_p = dspy.Predict(GenerateAdversarialPrompts)
+        #slow but more reliable
+        self.generator_cot = dspy.ChainOfThought(GenerateAdversarialPrompts)
+
+    def _get_generator(self, mode: str):
+        mode = mode.lower()
+
+        if mode == "fast":
+            return self.generator_p
+        elif mode == "cot":
+            return self.generator_cot
+        else:
+            raise ValueError("Invalid mode. Choose 'fast' or 'cot'.")
+
     async def generate_category(
         self,
         profile,
         company_policy,
         category,
-        num_prompts = PROMPTS_PER_CATEGORY
+        num_prompts = PROMPTS_PER_CATEGORY,
+        mode = "fast"
     ):
-        result = self.generator(
+        generator = self._get_generator(mode)
+
+        result = generator(
             agent_description = str(profile),
             system_prompt    = profile.system_prompt,
             tool_definitions = str(profile.tool_definitions),
@@ -91,6 +107,7 @@ class AdversarialPromptGenerator:
             structured.append({
                 "id": f"{category}_{idx}",
                 "category": category,
+                "generation_mode": mode,
                 "prompt": prompt
             })
 
@@ -99,7 +116,8 @@ class AdversarialPromptGenerator:
     async def generate_all(
         self,
         profile,
-        company_policy
+        company_policy,
+        mode = "fast"
     ):
 
         tasks = []
@@ -110,7 +128,8 @@ class AdversarialPromptGenerator:
                     profile=profile,
                     company_policy=company_policy,
                     category=category,
-                    num_prompts=PROMPTS_PER_CATEGORY
+                    num_prompts=PROMPTS_PER_CATEGORY,
+                    mode=mode
                 )
             )
 
