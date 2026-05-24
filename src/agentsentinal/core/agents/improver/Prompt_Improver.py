@@ -174,9 +174,10 @@ class PromptImprover(dspy.Module):
         company_policy:   str = "",
         regulations:      str = "",
         original_prompt:  str = "",
-        tool_definitions: list[dict] = [],
+        tool_definitions: list[dict] | None = None,
     ) -> ImprovementResult:
 
+        tool_definitions = tool_definitions or []
         prompt     = original_prompt
         change_log: list[str] = []
 
