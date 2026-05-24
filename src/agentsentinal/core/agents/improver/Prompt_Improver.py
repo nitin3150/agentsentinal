@@ -364,10 +364,12 @@ class PromptImprover(dspy.Module):
                     f"(was {tool_profile.quality_score}/10)."
                 )
                 try:
+                    existing_params = dict(tool_def.get("parameters") or {})
+                    existing_params["properties"] = json.loads(r.improved_parameters)
                     return {
                         **tool_def,
                         "description": r.improved_description,
-                        "parameters": {"properties": json.loads(r.improved_parameters)}
+                        "parameters": existing_params,
                     }
                 except json.JSONDecodeError:
                     change_log.append(
