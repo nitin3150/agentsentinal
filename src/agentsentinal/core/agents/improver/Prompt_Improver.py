@@ -286,7 +286,7 @@ class PromptImprover(dspy.Module):
             change_log: list[str],
     ) -> str:
         """
-        Merge multple independently-fixed prompts into one coherent system prompt.
+        Merge multiple independently-fixed prompts into one coherent system prompt.
         Each partial_prompt fixed a different risk in isolation - the merger
         reconciles them without duplicating content or creating contradictions.
         """
