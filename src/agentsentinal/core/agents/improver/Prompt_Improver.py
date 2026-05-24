@@ -36,7 +36,6 @@ Usage:
 """
 from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
-from unittest import result
 from agentsentinal.models.agent import InspectedAgentProfile
 
 import asyncio
