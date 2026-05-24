@@ -133,12 +133,12 @@ class FixToolQuality(dspy.Signature):
     original_description: str       = dspy.InputField(desc="Current tool description (may be empty)")
     missing_fields:       list[str] = dspy.InputField(desc="Fields the Inspector found missing")
     improved_description: str       = dspy.OutputField(desc="Complete rewritten tool description")
-    improved_parameters:  str       = dspy.OutputField(desc="Parameter block in JSON-schema format with types and descriptions")
+    improved_parameters:  str       = dspy.OutputField(desc="JSON object mapping parameter name to its schema (name: {type, description}), no outer wrapper")
 
 class MergePromptSections(dspy.Signature):
     """
     Multiple versions of the same prompt have each been improved
-    to fic a different risk in isolation. Merge them into one coherent prompt that:
+    to fix a different risk in isolation. Merge them into one coherent prompt that:
     1. Includes every fix from every partial prompt
     2. Does not duplicate any section
     3. Does not contradict any fix

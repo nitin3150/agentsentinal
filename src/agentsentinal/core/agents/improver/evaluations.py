@@ -1,4 +1,4 @@
-from agentsentinal.core.agents.improver.policy_gaurd import PolicyGuard
+from agentsentinal.core.agents.improver.policy_guard import PolicyGuard
 import asyncio
 from agentsentinal.models.agent import InspectedAgentProfile
 import dspy

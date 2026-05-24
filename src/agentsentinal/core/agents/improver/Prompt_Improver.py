@@ -60,7 +60,7 @@ from agentsentinal.core.agents.improver.signatures import (
     MergePromptSections,
 )
 
-from agentsentinal.core.agents.improver.policy_gaurd import PolicyGuard
+from agentsentinal.core.agents.improver.policy_guard import PolicyGuard
 from agentsentinal.models.prompt import ImprovementResult
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -70,17 +70,6 @@ from agentsentinal.models.prompt import ImprovementResult
 def _has_flag(profile: InspectedAgentProfile, category: RiskCategory) -> bool:
     return any(f.category == category for f in profile.risk_flags)
 
-
-def _flags_as_text(profile: InspectedAgentProfile) -> str:
-    lines = []
-    for f in profile.risk_flags:
-        lines.append(
-            f"[{f.severity.value.upper()}] {f.category.value}\n"
-            f"  Issue      : {f.description}\n"
-            f"  Location   : {f.location}\n"
-            f"  Suggestion : {f.suggestion}"
-        )
-    return "\n\n".join(lines)
 
 
 def _low_quality_tools(profile: InspectedAgentProfile) -> list[ToolProfile]:
