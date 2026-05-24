@@ -191,12 +191,12 @@ class PromptImprover(dspy.Module):
         #Running rest in parallel
 
         async def run_fix(fix_fn, label, **kwargs):
-            """Run a DSPy fix in a thread since DSPy is synchronous."""
-            result = await asyncio.to_thread(_safe_call, fix_fn, label, change_log, **kwargs)
-            return label, result
-        
+            """Run a DSPy fix in a thread. Returns (label, result, task_log) with isolated log."""
+            task_log: list[str] = []
+            result = await asyncio.to_thread(_safe_call, fix_fn, label, task_log, **kwargs)
+            return label, result, task_log
+
         parallel_tasks = []
-            
 
         if _has_flag(agent_profile, RiskCategory.CONSTRAINT_MISSING):
             parallel_tasks.append(run_fix(
@@ -208,10 +208,11 @@ class PromptImprover(dspy.Module):
 
         if _has_flag(agent_profile, RiskCategory.AMBIGUOUS_INSTRUCTIONS):
             parallel_tasks.append(run_fix(
-                self.fix_ambiguity, "AMBIGUOUS_INSTRUCTIONS", 
+                self.fix_ambiguity, "AMBIGUOUS_INSTRUCTIONS",
                 original_prompt   = prompt,
                 ambiguous_phrases = agent_profile.ambiguous_phrases,
             ))
+
         if _has_flag(agent_profile, RiskCategory.SCOPE_OVERFLOW):
             parallel_tasks.append(run_fix(
                 self.fix_scope, "SCOPE_OVERFLOW",
@@ -227,21 +228,20 @@ class PromptImprover(dspy.Module):
 
         parallel_results = await asyncio.gather(*parallel_tasks)
 
-        # --- Merge parallel results ------------------------------------
+        # Flush per-task logs in deterministic order, then merge prompts.
+        partial_prompts = []
+        for label, r, task_log in parallel_results:
+            change_log.extend(task_log)
+            if r:
+                partial_prompts.append(r.improved_prompt)
+                change_log.append(f"[{label}] Applied.")
 
-        if parallel_results:
-            partial_prompts = []
-            for label, r in parallel_results:
-                if r:
-                    partial_prompts.append(r.improved_prompt)
-                    change_log.append(f"[{label}] Applied.")
-            
-            if partial_prompts:
-                prompt = await self._merge_prompts(
-                    original_prompt = prompt,
-                    partial_prompts  = partial_prompts,
-                    change_log       = change_log,
-                ) # type: ignore
+        if partial_prompts:
+            prompt = await self._merge_prompts(
+                original_prompt = prompt,
+                partial_prompts = partial_prompts,
+                change_log      = change_log,
+            )
         
         # memory fix
 
@@ -300,10 +300,11 @@ class PromptImprover(dspy.Module):
         if result:
             change_log.append("[MERGE] Parallel fixes merged successfully.")
             return result.merged_prompt
-        else:
-            #Fallback: just use the last successful partial fix
-            change_log.append("[MERGE] Failed to merge parallel fixes, using last successful fix.")
-            return partial_prompts[-1]
+        change_log.append(
+            f"[MERGE] Failed — all {len(partial_prompts)} parallel fix(es) abandoned. "
+            "Original prompt (with sequential fixes) retained."
+        )
+        return original_prompt
 
     async def _fix_tools_parallel(
         self,
