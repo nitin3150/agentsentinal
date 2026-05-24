@@ -156,14 +156,12 @@ class PromptImprover(dspy.Module):
     async def forward(
         self,
         agent_profile:    InspectedAgentProfile,
-        company_policy:   str = "",
+        policies:   str = "",
         regulations:      str = "",
-        original_prompt:  str = "",
-        tool_definitions: list[dict] | None = None,
     ) -> ImprovementResult:
 
-        tool_definitions = tool_definitions or []
-        prompt     = original_prompt
+        tool_definitions = agent_profile.tool_definitions or []
+        prompt     = agent_profile.system_prompt
         change_log: list[str] = []
 
         # ── Prompt fixes (order matters — each step feeds the next) ───────────
@@ -202,7 +200,7 @@ class PromptImprover(dspy.Module):
             parallel_tasks.append(run_fix(
                 self.fix_constraints, "CONSTRAINT_MISSING",
                 original_prompt = prompt,
-                company_policy  = company_policy,
+                company_policy  = policies,
                 regulations     = regulations,
             ))
 
@@ -217,7 +215,7 @@ class PromptImprover(dspy.Module):
             parallel_tasks.append(run_fix(
                 self.fix_scope, "SCOPE_OVERFLOW",
                 original_prompt = prompt,
-                company_policy  = company_policy,
+                company_policy  = policies,
             ))
 
         if _has_flag(agent_profile, RiskCategory.HALLUCINATION_PRONE):
@@ -250,7 +248,7 @@ class PromptImprover(dspy.Module):
                 self.fix_memory, "MEMORY_RISK", change_log,
                 original_prompt = prompt,
                 memory_risks    = agent_profile.memory_risks,
-                company_policy  = company_policy,
+                company_policy  = policies,
                 regulations     = regulations,
             )
             if r:
@@ -269,7 +267,7 @@ class PromptImprover(dspy.Module):
 
         # ── Policy guard ─────────────────────────────────────────────────────
 
-        guard      = PolicyGuard(company_policy=company_policy, regulations=regulations)
+        guard      = PolicyGuard(company_policy=policies, regulations=regulations)
         violations = guard.check(prompt)
 
         return ImprovementResult(

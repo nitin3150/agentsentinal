@@ -7,6 +7,8 @@ from agentsentinal.core.agents.intake.agent_intake import AgentIntake
 from agentsentinal.models.agent import InspectedAgentProfile, AgentProfile
 from agentsentinal.core.agents.improver.prompt_improver import PromptImprover
 import logging
+import dspy
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -86,9 +88,19 @@ class AgentSentinel:
         profile = self._intake.extract_profile(agent, agent_profile)
         return self._run_async(self._inspector.inspect(profile))
 
-    def improve(self):
-        pass
+    def improve(self, agent_profile:InspectedAgentProfile, policies:str=""):
+        dspy.configure(lm=dspy.LM(
+            os.getenv("GROQ_MODEL") or "",
+            api_key=os.getenv("GROQ_API_KEY"),
+        ))
 
+        improver = PromptImprover()
+        result   = improver(
+            agent_profile = agent_profile,
+            policies   = policies,
+        )
+        return result
+    
     def stress_test(self):
         pass
 
