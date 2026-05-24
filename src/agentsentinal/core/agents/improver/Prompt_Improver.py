@@ -39,11 +39,7 @@ from concurrent.futures import ThreadPoolExecutor
 from agentsentinal.models.agent import InspectedAgentProfile
 
 import asyncio
-import re
 import json
-from dataclasses import dataclass, field
-from typing import Any
-from concurrent.futures import ThreadPoolExecutor
 
 import dspy
 
@@ -207,9 +203,7 @@ class PromptImprover(dspy.Module):
 
         async def run_fix(fix_fn, label, **kwargs):
             """Run a DSPy fix in a thread since DSPy is synchronous."""
-            loop = asyncio.get_event_loop()
-            with ThreadPoolExecutor() as pool:
-                result = await loop.run_in_executor(pool, lambda: _safe_call(fix_fn, label, change_log, **kwargs))
+            result = await asyncio.to_thread(_safe_call, fix_fn, label, change_log, **kwargs)
             return label, result
         
         parallel_tasks = []
@@ -308,16 +302,12 @@ class PromptImprover(dspy.Module):
         reconciles them without duplicating content or creating contradictions.
         """
 
-        loop = asyncio.get_event_loop()
-        with ThreadPoolExecutor() as pool:
-            result = await loop.run_in_executor(
-                pool,
-                lambda: _safe_call(
-                    self.merge_prompts, "MERGE", change_log,
-                    original_prompt = original_prompt,
-                    partial_prompts = partial_prompts,
-                )
-            )
+        result = await asyncio.to_thread(
+            _safe_call,
+            self.merge_prompts, "MERGE", change_log,
+            original_prompt=original_prompt,
+            partial_prompts=partial_prompts,
+        )
         if result:
             change_log.append("[MERGE] Parallel fixes merged successfully.")
             return result.merged_prompt
@@ -346,17 +336,13 @@ class PromptImprover(dspy.Module):
                 return tool_def
             
             tool_profile = _low_quality[name]
-            loop = asyncio.get_event_loop()
-            with ThreadPoolExecutor() as pool:
-                r = await loop.run_in_executor(
-                    pool,
-                    lambda: _safe_call(
-                        self.fix_tool, f"TOOL_QUALITY_LOW:{name}", change_log,
-                        tool_name            = name,
-                        original_description = tool_def.get("description", ""),
-                        missing_fields       = tool_profile.missing_fields,
-                    )
-                )
+            r = await asyncio.to_thread(
+                _safe_call,
+                self.fix_tool, f"TOOL_QUALITY_LOW:{name}", change_log,
+                tool_name=name,
+                original_description=tool_def.get("description", ""),
+                missing_fields=tool_profile.missing_fields,
+            )
             
             if r:
                 change_log.append(
