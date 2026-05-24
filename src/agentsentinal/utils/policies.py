@@ -15,4 +15,3 @@ def parse_policy_pdf(pdf_path: str) -> str:
  
 if __name__ == "__main__":
     print(parse_policy_pdf(r"src\agentsentinal\core\agents\inspector\SAMPLE-EMPLOYEE-POLICY-HANDBOOK.pdf"))
- 

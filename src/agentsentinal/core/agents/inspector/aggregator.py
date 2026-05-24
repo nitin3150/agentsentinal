@@ -3,6 +3,7 @@ from typing import Optional
 
 from agentsentinal.core.agents.inspector.analyzers.framework import FrameworkAnalysis
 from agentsentinal.core.agents.inspector.analyzers.memory import MemoryAnalysis
+from agentsentinal.core.agents.inspector.analyzers.policy import PolicyAnalysis
 from agentsentinal.core.agents.inspector.analyzers.prompt import PromptAnalysis
 from agentsentinal.core.agents.inspector.analyzers.semantic import SemanticAnalysis
 from agentsentinal.core.agents.inspector.analyzers.tools import ToolsAnalysis
@@ -46,6 +47,9 @@ def _fmt_results(k: dict) -> str:
         f"\n  --- Memory ---"
         f"\n  has_memory          : {k.get('has_memory', False)}"
         f"\n  memory_type         : {k.get('memory_type') or 'none'}"
+        f"\n  --- Policy ---"
+        f"\n  policy_compliance   : {k.get('policy_compliance_score', 100)}/100"
+        f"\n  policy_violations   : {k.get('policy_violations') or '(none)'}"
         f"\n  --- Risk Flags ({len(risk_flags)}) ---\n{flag_lines}"
         f"\n  warnings            : {warnings or '(none)'}"
     )
@@ -67,6 +71,7 @@ def aggregate(
     memory: Optional[MemoryAnalysis],
     framework: Optional[FrameworkAnalysis],
     semantic: Optional[SemanticAnalysis],
+    policy: Optional[PolicyAnalysis] = None,
 ) -> InspectedAgentProfile:
     flags: list[RiskFlag] = []
     ambiguous: list[str] = []
@@ -127,6 +132,13 @@ def aggregate(
         )
         ambiguous.extend(semantic.ambiguous_phrases)
         flags.extend(semantic.risk_flags)
+
+    if policy is not None:
+        profile_kwargs.update(
+            policy_compliance_score=policy.compliance_score,
+            policy_violations=[v.description for v in policy.violations],
+        )
+        flags.extend(policy.risk_flags)
 
     # De-dupe ambiguous phrases while preserving order.
     seen: set[str] = set()

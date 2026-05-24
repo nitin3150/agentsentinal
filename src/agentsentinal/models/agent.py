@@ -21,6 +21,7 @@ class RiskCategory(str, Enum):
     PERSONA_DRIFT = "persona_drift"
     MEMORY_RISK = "memory_risk"
     HALLUCINATION_PRONE = "hallucination_prone"
+    POLICY_VIOLATION = "policy_violation"
 
 
 class RiskFlag(BaseModel):
@@ -107,6 +108,10 @@ class InspectedAgentProfile(AgentProfile):
 
     # Estimation
     estimated_baseline_score: int = Field(ge=0, le=100, default=50)
+
+    # Policy compliance
+    policy_compliance_score: int = Field(ge=0, le=100, default=100)
+    policy_violations: list[str] = Field(default_factory=list)
 
     # Extraction metadata
     extraction_confidence: float = Field(ge=0.0, le=1.0, default=0.0)

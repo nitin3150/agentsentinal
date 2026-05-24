@@ -12,6 +12,10 @@ from agentsentinal.core.agents.inspector.analyzers.memory import (
     MemoryAnalysis,
     analyze_memory,
 )
+from agentsentinal.core.agents.inspector.analyzers.policy import (
+    PolicyAnalysis,
+    analyze_policy,
+)
 from agentsentinal.core.agents.inspector.analyzers.prompt import (
     PromptAnalysis,
     analyze_prompt,
@@ -26,6 +30,7 @@ from agentsentinal.core.agents.inspector.analyzers.tools import (
 )
 from agentsentinal.core.agents.intake.types import ExtractionResult
 from agentsentinal.models import AgentProfile
+from agentsentinal.utils.policies import parse_policy_pdf
 import logging
 
 logger = logging.getLogger(__name__)
@@ -42,7 +47,7 @@ class InspectorAgent:
     def __init__(self, semantic_enabled: bool = True):
         self.semantic_enabled = semantic_enabled
 
-    async def inspect(self, profile: AgentProfile) -> InspectedAgentProfile:
+    async def inspect(self, profile: AgentProfile, policies: str = "") -> InspectedAgentProfile:
         logger.info("Inspection Starts...")
         extraction = ExtractionResult(
             system_prompt=profile.system_prompt,
@@ -60,7 +65,16 @@ class InspectorAgent:
                 f"Low extraction confidence ({extraction.confidence:.2f}). "
                 "Pass system_prompt and tool_definitions explicitly for a more complete analysis."
             )
-        
+
+        policy_text = ""
+        if policies:
+            try:
+                policy_text = await asyncio.to_thread(parse_policy_pdf, policies)
+                logger.info("Policy PDF parsed: %d chars", len(policy_text))
+            except Exception as exc:
+                logger.warning("Failed to parse policy PDF '%s': %s", policies, exc)
+                extraction.warnings.append(f"Policy PDF could not be parsed: {exc}")
+
         # Static analyzers are pure Python (no I/O, no GIL release) — run them
         # directly rather than via to_thread to avoid pointless thread overhead.
         try:
@@ -69,21 +83,21 @@ class InspectorAgent:
         except Exception as exc:
             logger.error("Error Analysing Prompt!!")
             prompt_res = exc
-        
+
         try:
             logger.info("Analysing Tools...")
             tools_res = analyze_tools(extraction.tool_definitions)
         except Exception as exc:
             logger.error("Error Analysing Tools!!")
             tools_res = exc
-        
+
         try:
             logger.info("Analysing Memory...")
             memory_res = analyze_memory(extraction.source_object, extraction.source_code)
         except Exception as exc:
             logger.error("Error Analysing Memory!!")
             memory_res = exc
-        
+
         try:
             logger.info("Analysing Framework...")
             framework_res = analyze_framework(extraction.source_object, extraction.source_code)
@@ -97,7 +111,7 @@ class InspectorAgent:
                 "ambiguous_phrases": prompt_res.ambiguous_phrases,
                 "constraint_count": prompt_res.constraint_count,
             }
-        
+
         try:
             logger.info("Analysing Semantics...")
             semantic_res: Any = await self._run_semantic(extraction, static_findings)
@@ -105,11 +119,23 @@ class InspectorAgent:
             logger.error("Error Analysing Semantics!!")
             semantic_res = exc
 
+        try:
+            logger.info("Analysing Policy...")
+            policy_res: Any = await analyze_policy(
+                system_prompt=extraction.system_prompt,
+                tool_definitions=extraction.tool_definitions,
+                policy_text=policy_text,
+            )
+        except Exception as exc:
+            logger.error("Error Analysing Policy!!")
+            policy_res = exc
+
         prompt = _unwrap(prompt_res, PromptAnalysis, extraction, "prompt")
         tools = _unwrap(tools_res, ToolsAnalysis, extraction, "tools")
         memory = _unwrap(memory_res, MemoryAnalysis, extraction, "memory")
         framework = _unwrap(framework_res, FrameworkAnalysis, extraction, "framework")
         semantic = _unwrap(semantic_res, SemanticAnalysis, extraction, "semantic")
+        policy = _unwrap(policy_res, PolicyAnalysis, extraction, "policy")
 
         return aggregate(
             agent_id=str(uuid4()),
@@ -119,6 +145,7 @@ class InspectorAgent:
             memory=memory,
             framework=framework,
             semantic=semantic,
+            policy=policy,
         )
 
     async def _run_semantic(

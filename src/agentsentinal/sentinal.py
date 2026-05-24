@@ -80,13 +80,13 @@ class AgentSentinel:
             "inspected_profile":None,
         }
 
-    def inspect(self, agent, domain: str = "", system_prompt: str = "") -> InspectedAgentProfile:
+    def inspect(self, agent, domain: str = "", system_prompt: str = "", policies:str="") -> InspectedAgentProfile:
         agent_profile = AgentProfile(
             domain=domain,
             system_prompt=system_prompt,
         )
         profile = self._intake.extract_profile(agent, agent_profile)
-        return self._run_async(self._inspector.inspect(profile))
+        return self._run_async(self._inspector.inspect(profile,policies))
 
     def improve(self, agent_profile:InspectedAgentProfile, policies:str=""):
         dspy.configure(lm=dspy.LM(

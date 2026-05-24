@@ -74,7 +74,6 @@ def _has_flag(profile: InspectedAgentProfile, category: RiskCategory) -> bool:
     return any(f.category == category for f in profile.risk_flags)
 
 
-
 def _low_quality_tools(profile: InspectedAgentProfile) -> list[ToolProfile]:
     return [t for t in profile.tool_profiles if t.quality_score < 7]
 
