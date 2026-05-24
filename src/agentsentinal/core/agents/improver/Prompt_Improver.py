@@ -103,13 +103,15 @@ def _safe_call(fn, label: str, change_log: list[str], **kwargs):
     DSPy fails to parse the response, returns None instead of crashing.
     The caller keeps the prompt unchanged and logs the skip.
     """
+    # DSPy ChainOfThought adds these fields internally — they can be None on
+    # reasoning models without indicating a failed call.
+    _DSPY_INTERNAL = frozenset({"reasoning", "rationale"})
+
     try:
         result = fn(**kwargs)
 
-        # Some reasoning models return an object whose output fields are None
-        # even though no exception was raised catch that here too.
         for field_name, field_value in vars(result).items():
-            if field_name.startswith("_"):
+            if field_name.startswith("_") or field_name in _DSPY_INTERNAL:
                 continue
             if field_value is None:
                 change_log.append(
