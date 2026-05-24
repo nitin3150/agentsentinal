@@ -156,6 +156,17 @@ class PromptImprover(dspy.Module):
         self.merge_prompts    = dspy.ChainOfThought(MergePromptSections)
     
 
+    def __call__(self, *args, **kwargs):  # type: ignore[override]
+        coro = self.forward(*args, **kwargs)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is not None and loop.is_running():
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result()
+        return asyncio.run(coro)
+
     async def forward(
         self,
         agent_profile:    InspectedAgentProfile,
