@@ -1,12 +1,15 @@
 '''
-Python code to generate adveserial prompts for testing improved prompts using DSPy.
-The code will egnerate 100 prompts across 10 categories, and save them as a JSON.
+Adversarial prompt generator using DSPy.
+Generates prompts across 10 attack categories; number per category set by PROMPTS_PER_CATEGORY.
 '''
 
-import asyncio
 import json
+import logging
 import random
+import time
 import dspy
+
+logger = logging.getLogger(__name__)
 
 # ==========================
 # DSpy Signature
@@ -48,7 +51,7 @@ CATEGORIES = [
     "chain_of_thought_exploitation"
 ]
 
-PROMPTS_PER_CATEGORY = 10
+PROMPTS_PER_CATEGORY = 2
 
 # ==========================
 # Generator
@@ -59,7 +62,7 @@ class AdversarialPromptGenerator:
     def __init__(self):
         self.generator = dspy.Predict(GenerateAdversarialPrompts)
     
-    async def generate_category(
+    def generate_category(
         self,
         profile,
         company_policy,
@@ -96,31 +99,25 @@ class AdversarialPromptGenerator:
 
         return structured
     
-    async def generate_all(
+    def generate_all(
         self,
         profile,
-        company_policy
+        company_policy,
+        delay: float = 8.0
     ):
-
-        tasks = []
-
-        for category in CATEGORIES:
-            tasks.append(
-                self.generate_category(
-                    profile=profile,
-                    company_policy=company_policy,
-                    category=category,
-                    num_prompts=PROMPTS_PER_CATEGORY
-                )
-            )
-
-        results = await asyncio.gather(*tasks)
-
         flattened = []
 
-        for category_results in results:
-            flattened.extend(category_results)
+        for i, category in enumerate(CATEGORIES):
+            if i > 0:
+                time.sleep(delay)
+            result = self.generate_category(
+                profile=profile,
+                company_policy=company_policy,
+                category=category,
+                num_prompts=PROMPTS_PER_CATEGORY
+            )
+            flattened.extend(result)
+            logger.info("Generated %s (%d/%d)", category, i + 1, len(CATEGORIES))
 
         random.shuffle(flattened)
-
         return flattened
