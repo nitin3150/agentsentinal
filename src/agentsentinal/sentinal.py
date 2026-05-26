@@ -1,14 +1,14 @@
 import asyncio
 import concurrent.futures
 from typing import TypedDict, Any, Optional
-from langgraph.graph import StateGraph, START,END
+from langgraph.graph import StateGraph, START, END
 from agentsentinal.core.agents.inspector import InspectorAgent
 from agentsentinal.core.agents.intake.agent_intake import AgentIntake
 from agentsentinal.models.agent import InspectedAgentProfile, AgentProfile
 from agentsentinal.core.agents.improver.prompt_improver import PromptImprover
 import logging
-import dspy
 import os
+import dspy
 
 logger = logging.getLogger(__name__)
 
