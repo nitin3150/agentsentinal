@@ -4,9 +4,7 @@
 
 from dotenv import load_dotenv
 load_dotenv()
-
 import os
-
 from langchain_openai import ChatOpenAI
 from langchain.tools import tool
 from langchain.agents import create_agent
