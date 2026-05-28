@@ -1,200 +1,190 @@
-# Agent Sentinal - Data Protection as Code
+# Agent Sentinal — Production Readiness Platform for AI Agents
 
-Agent Sentinal is an enterprise-grade data protection system that implements "Data Protection as Code". It provides real-time monitoring and protection for sensitive data across large language model (LLM) workflows using a two-tier classification system.
+Agent Sentinal inspects, improves, and stress-tests AI agents before they ship. It performs static + semantic analysis of an agent's system prompt, tool definitions, memory, and framework structure, produces a risk report, rewrites the prompt to fix every flagged issue, and runs adversarial prompt campaigns to verify the fixes hold.
 
-## 📂 Repository Structure
+## Repository Structure
 
 ```
 agentsentinal/
-├── app/
-│   ├── api/               # API endpoints and routing
-│   ├── core/              # Core configuration and utilities
-│   ├── services/          # Business logic and workflows
-│   │   ├── llm/           # LLM integration (Vertex AI, etc.)
-│   │   ├── vector_store/  # Vector DB operations
-│   │   ├── worker/        # Background job processing
-│   │   ├── anonymizer/    # Data transformation logic
-│   │   ├── classify/      # Classification logic
-│   │   └── validator/     # Validation logic
-│   ├── schemas/           # Pydantic data models
-│   └── main.py            # Application entry point
-├── migrations/            # Database migrations
-├── tests/                 # Unit and integration tests
-├── .env                   # Environment variables (not in git)
-├── .gitignore             # Files to ignore in version control
-├── requirements.txt       # Project dependencies
-└── README.md              # Project documentation
+├── src/agentsentinal/
+│   ├── sentinal.py                  # AgentSentinel — main entry point
+│   ├── core/agents/
+│   │   ├── intake/                  # Framework detection & profile extraction
+│   │   │   ├── agent_intake.py      # AgentIntake orchestrator
+│   │   │   └── detectors/
+│   │   │       └── langgraph.py     # LangGraph detector
+│   │   ├── inspector/               # Static + semantic analysis
+│   │   │   ├── orchestrator.py      # InspectorAgent
+│   │   │   ├── aggregator.py        # Combines analyzer outputs
+│   │   │   └── analyzers/
+│   │   │       ├── prompt.py        # Constraint, ambiguity, injection checks
+│   │   │       ├── tools.py         # Tool quality scoring
+│   │   │       ├── memory.py        # Memory risk detection
+│   │   │       ├── framework.py     # Graph depth, loops, human-in-loop
+│   │   │       ├── semantic.py      # LLM-powered semantic analysis
+│   │   │       └── policy.py        # Policy compliance check
+│   │   ├── improver/                # DSPy-based prompt rewriter
+│   │   │   ├── prompt_improver.py   # PromptImprover (parallel + sequential fixes)
+│   │   │   ├── signatures.py        # DSPy fix signatures per risk category
+│   │   │   ├── policy_guard.py      # Final policy compliance gate
+│   │   │   └── evaluations.py       # DSPy optimizer evaluations
+│   │   └── tester/                  # Adversarial testing pipeline
+│   │       ├── tester.py            # TestAgent orchestrator
+│   │       ├── adveserial_prompts_generator.py
+│   │       ├── runner.py            # Runs prompts against live agent
+│   │       ├── evaluator.py         # Scores each response
+│   │       └── report.py            # Generates audit_report.json + .md
+│   ├── models/
+│   │   ├── agent.py                 # AgentProfile, InspectedAgentProfile, RiskFlag
+│   │   ├── intake.py                # ExtractionResult
+│   │   └── prompt.py                # ImprovementResult
+│   └── utils/
+│       ├── policies.py              # PDF policy parser
+│       └── logger.py
+├── demo/                            # Example agents (LangGraph, CrewAI, ADK, etc.)
+├── tests/
+├── main.py
+├── pyproject.toml
+└── .env
 ```
 
-## ⚡ Quick Start
-
-### Prerequisites
-
-- Python 3.13+
-- PostgreSQL database
-- Redis cache
-- Google Cloud credentials (for Vertex AI)
-
-### Installation
+## Quick Start
 
 ```bash
-# Clone the repository
 git clone https://github.com/goyalnitin148/agentsentinal.git
 cd agentsentinal
-
-# Create a virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-# Configure environment variables
-cp .env.example .env
-# Edit .env with your configuration
-
-# Run database migrations
-uv run alembic upgrade head
-
-# Run the application
-uv run uvicorn app.main:app --reload
+cp .env.example .env   # set GROQ_API_KEY, GROQ_MODEL, OPENROUTER_API_KEY, MODEL
 ```
 
-## 🔐 Data Protection Workflow
+## Core Workflow
 
 ```mermaid
 flowchart TD
-    A[User Request] --> B{Preprocessing}
-    B --> C[Classify: PII, PHI, PCI]
-    C --> D{Content Safety Check}
-    D --> E{Sensitive Data Found?}
-    E -->|Yes| F{Enforce Policies}
-    F --> G[Anonymize / Mask]
-    G --> H[Vector Search]
-    H --> I[Check Context / Drift]
-    I --> J[Allow / Reject / Flag]
-    J --> K[Response to User]
+    A[Your Agent] --> B[AgentIntake\nFramework detection + profile extraction]
+    B --> C[InspectorAgent\nStatic + semantic analysis]
+    C --> D{Risk flags?}
+    D -->|yes| E[PromptImprover\nDSPy-based rewrite]
+    D -->|no| F[InspectedAgentProfile\nclean]
+    E --> F
+    F --> G[TestAgent\nAdversarial stress test]
+    G --> H[audit_report.json + .md]
 ```
 
-## 🚀 Key Features
+## Three Operations
 
-### 1. Two-Tier Classification System
+### 1. `inspect(agent)` — risk analysis
 
-#### Tier 1: Content & Intent-Based Classification
-**Classify data with 30% less data using AI Context.**
+Extracts the agent's system prompt and tools, then runs six analyzers in parallel:
 
-- Uses 3-shot prompt engineering for high accuracy
-- Classifies in 25ms or less
-- Reduces data usage by 70% compared to 5-shot
+| Analyzer | What it checks |
+|---|---|
+| `prompt` | Ambiguous phrases, missing constraints, injection surface |
+| `tools` | Quality score per tool, missing fields |
+| `memory` | Memory type, data-leak risks |
+| `framework` | Graph depth, loops, conditional edges, human-in-loop |
+| `semantic` | LLM-powered persona clarity, scope, tone, hallucination risk |
+| `policy` | Violations against a supplied policy PDF |
 
-**Classification categories:**
-```
-1. Protected Health Information (PHI)
-2. Sensitive Personal Information (SPI)
-3. Financial Data (PCI)
-4. Personal Identifiable Information (PII)
-5. Company Intellectual Property (IP)
-6. General/Neutral Information
-```
-
-#### Tier 2: Policy-Driven Enforcement
-**Real-time protection using LLM-powered validators.**
-
-- **Classification:** Identify sensitive data using Tier 1
-- **Policy Validation:** Check against company-defined policies
-- **Reasoning:** LLM explains the violation in 50ms
-- **Action:** Allow, Reject, or Flag for review
-
-### 2. RAG-Powered Data Protection
-
-**Reduce false positives by 40% using Retrieval Augmented Generation.**
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant System as Agent Sentinal
-    participant VectorDB as Vector Database
-    participant PolicyDB as Policy Database
-    participant LLM as LLM
-
-    User->>System: Submit data for processing
-    System->>System: Classify data using Tier 1
-    System->>VectorDB: Retrieve relevant policies
-    VectorDB-->>System: Return policy documents
-    System->>PolicyDB: Check for specific violations
-    PolicyDB-->>System: Policy rules
-    System->>LLM: Validate against policies
-    System-->>User: Protected response
-```
-
-## 🛠️ Configuration
-
-### Environment Variables
-
-```bash
-# Google Cloud Configuration
-GOOGLE_CLOUD_PROJECT=your-project-id
-GOOGLE_CLOUD_LOCATION=your-region
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/keyfile.json
-
-# Database Configuration
-DATABASE_URL=postgresql://user:password@host:port/database
-
-# Redis Configuration
-REDIS_URL=redis://host:port/db
-```
-
-### Policy Management
-
-Create company policies in the vector database:
+Returns an `InspectedAgentProfile` with `risk_flags`, scores, and `policy_violations`.
 
 ```python
-from app.services.vector_store.client import get_vector_store
+from agentsentinal.sentinal import AgentSentinel
 
-store = get_vector_store()
-
-# Add a new policy
-store.add_policy(
-    id="policy_123",
-    name="Customer Data Privacy Policy",
-    description="Strictly prohibits sharing customer contact information",
-    content="Customers' names, emails, and phone numbers must never be shared externally..."
+sentinel = AgentSentinel()
+profile = sentinel.inspect(
+    agent,                        # compiled LangGraph graph (or other framework)
+    system_prompt="...",          # optional override
+    policies="sample_policies.pdf",
 )
-
-# Retrieve policies
-policies = store.get_policies(query="data privacy")
+print(profile.overall_risk)       # low / medium / high
+print(profile.risk_flags)
 ```
 
-## 🧪 Testing
+### 2. `improve(profile)` — prompt rewriting
+
+Takes the `InspectedAgentProfile` from step 1 and rewrites the system prompt + tool definitions to fix every flagged risk. Uses DSPy `ChainOfThought` signatures. Sequential fixes (injection, persona) run first; remaining fixes run in parallel and are merged.
+
+Risk categories fixed:
+
+- `INJECTION_VULNERABLE` — adds input-validation guardrails
+- `PERSONA_DRIFT` — anchors role/persona
+- `CONSTRAINT_MISSING` — adds policy- and regulation-grounded constraints
+- `AMBIGUOUS_INSTRUCTIONS` — rewrites vague phrases
+- `SCOPE_OVERFLOW` — narrows agent boundaries
+- `HALLUCINATION_PRONE` — adds grounding rules
+- `MEMORY_RISK` — adds memory-handling constraints
+- `POLICY_VIOLATION` — resolves detected policy violations
+- `TOOL_QUALITY_LOW` — rewrites low-scoring tool descriptions + parameters
+
+```python
+result = sentinel.improve(profile, policies="sample_policies.pdf")
+print(result.improved_prompt)
+print(result.change_log)
+```
+
+### 3. `test(agent, profile)` — adversarial stress test
+
+Three-step pipeline:
+
+1. **Generate** — DSPy generates adversarial prompts targeting every risk flag in the profile → `adversarial_prompts.json`
+2. **Run** — fires each prompt against the live agent (multithreaded) → `agent_responses.json`
+3. **Evaluate** — DSPy scores each response for policy compliance → `audit_report.json` + `audit_report.md`
+
+```python
+from agentsentinal.core.agents.tester.tester import TestAgent
+
+tester = TestAgent()
+report = tester.test(agent, profile, policies="sample_policies.pdf")
+print(report["summary"])   # pass_rate_pct, passed, failed, total
+```
+
+## Risk Categories
+
+| Category | Description |
+|---|---|
+| `injection_vulnerable` | System prompt can be overridden by user input |
+| `constraint_missing` | No explicit do/don't boundaries defined |
+| `ambiguous_instructions` | Vague phrasing that allows misinterpretation |
+| `scope_overflow` | Agent can act beyond its intended domain |
+| `tool_quality_low` | Tools lack descriptions, typed params, or error handling |
+| `persona_drift` | Persona not anchored — model can be role-played out of it |
+| `memory_risk` | Memory pattern may leak data across sessions |
+| `hallucination_prone` | No grounding or citation requirements |
+| `policy_violation` | Prompt or tools conflict with supplied policy document |
+
+## Supported Frameworks
+
+| Framework | Status |
+|---|---|
+| LangGraph | Supported |
+| CrewAI | Demo available (`demo/crewai_agent.py`) |
+| Google ADK | Demo available (`demo/google_adk_agent.py`) |
+| LangChain | Demo available (`demo/langchain_agent.py`) |
+| LlamaIndex | Demo available (`demo/llamaindex_agent.py`) |
+
+Pass `system_prompt` and `tool_definitions` explicitly for unsupported frameworks.
+
+## Environment Variables
 
 ```bash
-# Run all tests
-uv run pytest
+# LLM for improver + tester (via Groq)
+GROQ_API_KEY=...
+GROQ_MODEL=llama-3.3-70b-versatile   # or any Groq-hosted model
 
-# Run with coverage
-uv run pytest --cov=app
+# LLM for demo agents (via OpenRouter)
+OPENROUTER_API_KEY=...
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+MODEL=stepfun/step-3.5-flash
 ```
 
-## 🔐 Security Best Practices
+## Running Tests
 
-- **Never** commit `.env` files to version control
-- Use **strong, unique passwords** for database and services
-- **Rotate API keys** regularly
-- **Monitor** system logs for suspicious activity
-- **Regularly update** dependencies to patch vulnerabilities
+```bash
+uv run pytest
+```
 
-## 🤝 Contributing
+## License
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 📞 Support
-
-For issues, questions, or feature requests, please open an issue on the GitHub repository.
+MIT
