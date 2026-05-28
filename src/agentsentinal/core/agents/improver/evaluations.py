@@ -4,7 +4,7 @@ from agentsentinal.models.agent import InspectedAgentProfile
 import dspy
 from typing import Any
 from agentsentinal.models.prompt import ImprovementResult
-from agentsentinal.core.agents.improver.Prompt_Improver import PromptImprover
+from agentsentinal.core.agents.improver.prompt_improver import PromptImprover
 
 class ImprovementMetric:
     """
