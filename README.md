@@ -1,13 +1,13 @@
-# Agent Sentinal — Production Readiness Platform for AI Agents
+# Agent Sentinel — Production Readiness Platform for AI Agents
 
-Agent Sentinal inspects, improves, and stress-tests AI agents before they ship. It performs static + semantic analysis of an agent's system prompt, tool definitions, memory, and framework structure, produces a risk report, rewrites the prompt to fix every flagged issue, and runs adversarial prompt campaigns to verify the fixes hold.
+Agent Sentinel inspects, improves, and stress-tests AI agents before they ship. It performs static + semantic analysis of an agent's system prompt, tool definitions, memory, and framework structure, produces a risk report, rewrites the prompt to fix every flagged issue, and runs adversarial prompt campaigns to verify the fixes hold.
 
 ## Repository Structure
 
 ```
-agentsentinal/
-├── src/agentsentinal/
-│   ├── sentinal.py                  # AgentSentinel — main entry point
+agentsentinel/
+├── src/agentsentinel/
+│   ├── sentinel.py                  # AgentSentinel — main entry point
 │   ├── core/agents/
 │   │   ├── intake/                  # Framework detection & profile extraction
 │   │   │   ├── agent_intake.py      # AgentIntake orchestrator
@@ -51,8 +51,8 @@ agentsentinal/
 ## Quick Start
 
 ```bash
-git clone https://github.com/goyalnitin148/agentsentinal.git
-cd agentsentinal
+git clone https://github.com/goyalnitin148/agentsentinel.git
+cd agentsentinel
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # set GROQ_API_KEY, GROQ_MODEL, OPENROUTER_API_KEY, MODEL
@@ -90,7 +90,7 @@ Extracts the agent's system prompt and tools, then runs six analyzers in paralle
 Returns an `InspectedAgentProfile` with `risk_flags`, scores, and `policy_violations`.
 
 ```python
-from agentsentinal.sentinal import AgentSentinel
+from agentsentinel.sentinel import AgentSentinel
 
 sentinel = AgentSentinel()
 profile = sentinel.inspect(
@@ -133,7 +133,7 @@ Three-step pipeline:
 3. **Evaluate** — DSPy scores each response for policy compliance → `audit_report.json` + `audit_report.md`
 
 ```python
-from agentsentinal.core.agents.tester.tester import TestAgent
+from agentsentinel.core.agents.tester.tester import TestAgent
 
 tester = TestAgent()
 report = tester.test(agent, profile, policies="sample_policies.pdf")

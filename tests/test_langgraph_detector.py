@@ -6,9 +6,9 @@ import pytest
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, END
 
-from agentsentinal.core.agents.intake.detectors.langgraph import LangGraphDetector
-from agentsentinal.core.agents.intake.agent_intake import AgentIntake
-from agentsentinal.models import AgentProfile
+from agentsentinel.core.agents.intake.detectors.langgraph import LangGraphDetector
+from agentsentinel.core.agents.intake.agent_intake import AgentIntake
+from agentsentinel.models import AgentProfile
 
 
 class State(TypedDict):

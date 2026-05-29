@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Agent Sentinal is an enterprise-grade data protection system implementing "Data Protection as Code". Currently a skeleton project with minimal implementation.
+Agent Sentinel is an enterprise-grade data protection system implementing "Data Protection as Code". Currently a skeleton project with minimal implementation.
 
 ## Running the Project
 
@@ -35,7 +35,7 @@ Key dependencies:
 
 Per README.md, intended structure:
 ```
-agentsentinal/
+agentsentinel/
 ├── api/           # API endpoints
 ├── core/          # Core config
 ├── services/      # Business logic
