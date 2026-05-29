@@ -134,6 +134,6 @@ class AgentSentinel:
         test_agent = TestAgent()
         test_agent.test(agent, profile, policies = policies)
 
-    def certify(self,agent, domain:str="",system_prompt:str=""):
+    def audit(self,agent, domain:str="",system_prompt:str=""):
         result = self._invoke(self._inital_state(agent, domain=domain, system_prompt=system_prompt))
         return result["inspected_profile"]  # type: ignore[return-value]
