@@ -12,7 +12,7 @@ from agentsentinal.models import RiskCategory, RiskFlag, RiskLevel
 logger = logging.getLogger(__name__)
 
 DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-_raw_groq_model = os.getenv("GRO_MODEL", "llama-3.3-70b-versatile")
+_raw_groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 DEFAULT_GROQ_MODEL = _raw_groq_model.removeprefix("groq/")
 SEMANTIC_TIMEOUT = float(os.getenv("SEMANTIC_TIMEOUT", "30"))
 
