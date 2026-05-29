@@ -64,6 +64,7 @@ from agentsentinal.core.agents.improver.signatures import (
 from agentsentinal.core.agents.improver.policy_guard import PolicyGuard
 from agentsentinal.models.prompt import ImprovementResult, ChangeLogEntry
 import logging
+import difflib
 
 logger = logging.getLogger(__name__)
 
@@ -386,11 +387,29 @@ class PromptImprover(dspy.Module):
         else:
             logger.info("Policy guard passed.")
 
+        original_lines = agent_profile.system_prompt.splitlines()
+        improved_lines = prompt.splitlines()
+        diff = "\n".join(difflib.unified_diff(
+            original_lines,
+            improved_lines,
+            fromfile="original",
+            tofile="improved",
+            lineterm="",
+        ))
+
+        changed_lines = sum(1 for line in diff.splitlines() if line.startswith(("+", "-")) and not line.startswith(("+++", "---")))
+        if diff:
+            logger.info("Diff: %d line(s) changed", changed_lines)
+            logger.debug("Diff output:\n%s", diff)
+        else:
+            logger.info("Diff: no changes — prompt unchanged after all fixes.")
+
         result = ImprovementResult(
             improved_prompt           = prompt,
             improved_tool_definitions = improved_tools,
             change_log                = change_log,
             policy_violations         = violations,
+            diff                      = diff,
         )
         logger.info("Improvement complete: %s", _fmt_result(result))
         return result

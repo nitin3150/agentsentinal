@@ -29,3 +29,4 @@ class ImprovementResult(BaseModel):
     improved_tool_definitions: list[dict]
     change_log:                list[ChangeLogEntry]
     policy_violations:         list[str]
+    diff:                      str = ""
