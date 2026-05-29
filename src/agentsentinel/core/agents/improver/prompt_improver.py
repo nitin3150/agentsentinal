@@ -39,6 +39,7 @@ from concurrent.futures import ThreadPoolExecutor
 from agentsentinel.models.agent import InspectedAgentProfile
 
 import asyncio
+import contextvars
 import json
 
 import dspy
@@ -178,8 +179,9 @@ class PromptImprover(dspy.Module):
         except RuntimeError:
             loop = None
         if loop is not None and loop.is_running():
+            ctx = contextvars.copy_context()
             with ThreadPoolExecutor(max_workers=1) as pool:
-                return pool.submit(asyncio.run, coro).result()
+                return pool.submit(ctx.run, asyncio.run, coro).result()
         return asyncio.run(coro)
 
     async def forward(

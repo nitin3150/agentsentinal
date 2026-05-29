@@ -1,5 +1,7 @@
 import asyncio
 import concurrent.futures
+import contextvars
+from contextlib import contextmanager
 from typing import TypedDict, Any, Optional
 from langgraph.graph import StateGraph, START, END
 from agentsentinel.core.agents.inspector import InspectorAgent
@@ -21,34 +23,34 @@ class SentinelState(TypedDict):
 
 class AgentSentinel:
     def __init__(self, providers: list[dict] | None = None):
-        if providers:
-            self._configure_providers(providers)
-        else:
-            self._configure_from_env()
+        self._lm = self._build_lm(providers)
         self._intake = AgentIntake()
         self._inspector = InspectorAgent()
         self._improver = PromptImprover()
         self._workflow = self._build_workflow()
-    
-    def _configure_from_env(self):
+
+    def _build_lm(self, providers: list[dict] | None) -> "dspy.LM | None":
+        if providers:
+            primary = providers[0]
+            fallbacks = providers[1:]
+            lm = dspy.LM(primary["model"], api_key=primary["api_key"], num_retries=3)
+            litellm.num_retries = 3
+            if fallbacks:
+                litellm.fallbacks = fallbacks
+            return lm
         model = os.getenv("GROQ_MODEL") or os.getenv("OPENROUTER_MODEL") or ""
         api_key = os.getenv("GROQ_API_KEY") or os.getenv("OPENROUTER_API_KEY") or ""
         if model and api_key:
-            dspy.configure(lm=dspy.LM(model, api_key=api_key, num_retries=3))
+            return dspy.LM(model, api_key=api_key, num_retries=3)
+        return None
 
-    def _configure_providers(self, providers: list[dict]):
-        primary = providers[0]
-        fallbacks = providers[1:]
-
-        dspy.configure(lm=dspy.LM(
-            primary["model"],
-            api_key=primary["api_key"],
-            num_retries=3,
-        ))
-
-        litellm.num_retries = 3
-        if fallbacks:
-            litellm.fallbacks = fallbacks
+    @contextmanager
+    def _lm_context(self):
+        if self._lm is not None:
+            with dspy.context(lm=self._lm):
+                yield
+        else:
+            yield
         
     def _build_workflow(self):
         builder = StateGraph(SentinelState)
@@ -83,8 +85,9 @@ class AgentSentinel:
             loop = None
 
         if loop is not None and loop.is_running():
+            ctx = contextvars.copy_context()
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(asyncio.run, coro)
+                future = pool.submit(ctx.run, asyncio.run, coro)
                 return future.result()
 
         return asyncio.run(coro)
@@ -108,7 +111,8 @@ class AgentSentinel:
             system_prompt=system_prompt,
         )
         profile = self._intake.extract_profile(agent, agent_profile)
-        return self._run_async(self._inspector.inspect(profile,policies))
+        with self._lm_context():
+            return self._run_async(self._inspector.inspect(profile, policies))
 
     def improve(self, agent_profile: InspectedAgentProfile, policies: str = ""):
         policy_text = policies
@@ -120,11 +124,11 @@ class AgentSentinel:
             except Exception as exc:
                 logger.warning("Failed to parse policy PDF '%s': %s", policies, exc)
 
-        result = self._improver(
-            agent_profile=agent_profile,
-            policies=policy_text,
-        )
-        return result
+        with self._lm_context():
+            return self._improver(
+                agent_profile=agent_profile,
+                policies=policy_text,
+            )
     
     def stress_test(self, agent, profile: Optional[InspectedAgentProfile] = None, policies: str = ""):
         if profile is None:
