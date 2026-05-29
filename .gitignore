@@ -2,3 +2,8 @@
 .env
 __pycache__/
 *.pyc
+
+adversarial_prompts.json
+agent_responses.json
+audit_report.json
+audit_report.md
