@@ -17,7 +17,7 @@ class AgentIntake:
             detector = DetectorClass(agent)
             if detector.can_handle():
                 result = detector()
-                result.system_prompt = result.system_prompt.replace("\n","").replace(".","")
+                result.system_prompt = result.system_prompt.strip("\n").strip(".")
                 if agent_profile and agent_profile.system_prompt:
                     if result.system_prompt and result.system_prompt != agent_profile.system_prompt:
                         logger.error(
