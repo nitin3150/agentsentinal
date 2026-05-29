@@ -1,5 +1,11 @@
 from pydantic import BaseModel
 
+class ChangeLogEntry(BaseModel):
+    field: str
+    before: str
+    after: str
+    reason: str
+
 class ImprovementResult(BaseModel):
     """
     Returned by PromptImprover.forward().
@@ -21,5 +27,5 @@ class ImprovementResult(BaseModel):
     """
     improved_prompt:           str
     improved_tool_definitions: list[dict]
-    change_log:                list[str]
+    change_log:                list[ChangeLogEntry]
     policy_violations:         list[str]

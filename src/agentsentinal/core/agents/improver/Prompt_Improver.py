@@ -62,7 +62,7 @@ from agentsentinal.core.agents.improver.signatures import (
 )
 
 from agentsentinal.core.agents.improver.policy_guard import PolicyGuard
-from agentsentinal.models.prompt import ImprovementResult
+from agentsentinal.models.prompt import ImprovementResult, ChangeLogEntry
 import logging
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,10 @@ def _low_quality_tools(profile: InspectedAgentProfile) -> list[ToolProfile]:
 
 def _fmt_result(result: "ImprovementResult") -> str:
     violations = result.policy_violations or ["none"]
-    changes = "\n".join(f"    {i+1}. {c}" for i, c in enumerate(result.change_log)) or "    (none)"
+    changes = "\n".join(
+        f"    {i+1}. [{e.field}] {e.reason}"
+        for i, e in enumerate(result.change_log)
+    ) or "    (none)"
     tools = "\n".join(
         f"    • {t.get('name', '?')} — {t.get('description', '')[:80]}"
         for t in result.improved_tool_definitions
@@ -99,7 +102,7 @@ def _fmt_result(result: "ImprovementResult") -> str:
 # 3.  MAIN MODULE
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _safe_call(fn, label: str, change_log: list[str], **kwargs):
+def _safe_call(fn, label: str, change_log: list[ChangeLogEntry], **kwargs):
     """
     Calls a DSPy ChainOfThought module and returns the result.
     If the model returns None text (common with reasoning models like
@@ -107,8 +110,6 @@ def _safe_call(fn, label: str, change_log: list[str], **kwargs):
     DSPy fails to parse the response, returns None instead of crashing.
     The caller keeps the prompt unchanged and logs the skip.
     """
-    # DSPy ChainOfThought adds these fields internally — they can be None on
-    # reasoning models without indicating a failed call.
     _DSPY_INTERNAL = frozenset({"reasoning", "rationale"})
 
     try:
@@ -118,24 +119,30 @@ def _safe_call(fn, label: str, change_log: list[str], **kwargs):
             if field_name.startswith("_") or field_name in _DSPY_INTERNAL:
                 continue
             if field_value is None:
-                change_log.append(
-                    f"[{label}] ⚠ Skipped — model returned None for field "
-                    f"'{field_name}'. This is a known limitation of reasoning "
-                    f"models (e.g. Nemotron) that return reasoning_content "
-                    f"instead of text. The original prompt was kept for this step."
-                )
+                change_log.append(ChangeLogEntry(
+                    field="system_prompt",
+                    before="",
+                    after="",
+                    reason=(
+                        f"[{label}] ⚠ Skipped — model returned None for field "
+                        f"'{field_name}'. Known limitation of reasoning models "
+                        f"(e.g. Nemotron). Original prompt kept."
+                    ),
+                ))
                 return None
 
         return result
 
     except Exception as exc:
-        change_log.append(
-            f"[{label}] ⚠ Skipped — model response could not be parsed "
-            f"({type(exc).__name__}: {exc}). "
-            f"This is a known limitation of reasoning models (e.g. Nemotron) "
-            f"that return reasoning_content instead of text. "
-            f"The original prompt was kept for this step."
-        )
+        change_log.append(ChangeLogEntry(
+            field="system_prompt",
+            before="",
+            after="",
+            reason=(
+                f"[{label}] ⚠ Skipped — model response could not be parsed "
+                f"({type(exc).__name__}: {exc}). Original prompt kept."
+            ),
+        ))
         return None
 
 class PromptImprover(dspy.Module):
@@ -183,7 +190,7 @@ class PromptImprover(dspy.Module):
 
         tool_definitions = agent_profile.tool_definitions or []
         prompt     = agent_profile.system_prompt
-        change_log: list[str] = []
+        change_log: list[ChangeLogEntry] = []
         flags = [f.category.value for f in agent_profile.risk_flags]
 
         logger.info("Improvement started — agent: %s | risk flags: %s",
@@ -193,6 +200,7 @@ class PromptImprover(dspy.Module):
 
         if _has_flag(agent_profile, RiskCategory.INJECTION_VULNERABLE):
             logger.info("Fixing INJECTION_VULNERABLE...")
+            before_prompt = prompt
             r = _safe_call(
                 self.fix_injection, "INJECTION_VULNERABLE", change_log,
                 original_prompt   = prompt,
@@ -200,21 +208,36 @@ class PromptImprover(dspy.Module):
             )
             if r:
                 prompt = r.improved_prompt
-                change_log.append(f"[INJECTION_VULNERABLE] {r.defences_added}")
+                change_log.append(ChangeLogEntry(
+                    field="system_prompt",
+                    before=before_prompt[:300],
+                    after=prompt[:300],
+                    reason=f"INJECTION_VULNERABLE — {r.defences_added}",
+                ))
                 logger.info("INJECTION_VULNERABLE fixed.")
+                logger.debug("INJECTION_VULNERABLE before: %s", before_prompt[:80])
+                logger.debug("INJECTION_VULNERABLE after:  %s", prompt[:80])
             else:
                 logger.warning("INJECTION_VULNERABLE skipped — see change log.")
 
         if _has_flag(agent_profile, RiskCategory.PERSONA_DRIFT):
             logger.info("Fixing PERSONA_DRIFT...")
+            before_prompt = prompt
             r = _safe_call(
                 self.fix_persona, "PERSONA_DRIFT", change_log,
                 original_prompt = prompt,
             )
             if r:
                 prompt = r.improved_prompt
-                change_log.append(f"[PERSONA_DRIFT] {r.persona_section}")
+                change_log.append(ChangeLogEntry(
+                    field="system_prompt",
+                    before=before_prompt[:300],
+                    after=prompt[:300],
+                    reason=f"PERSONA_DRIFT — {r.persona_section}",
+                ))
                 logger.info("PERSONA_DRIFT fixed.")
+                logger.debug("PERSONA_DRIFT before: %s", before_prompt[:80])
+                logger.debug("PERSONA_DRIFT after:  %s", prompt[:80])
             else:
                 logger.warning("PERSONA_DRIFT skipped — see change log.")
 
@@ -222,7 +245,7 @@ class PromptImprover(dspy.Module):
 
         async def run_fix(fix_fn, label, **kwargs):
             """Run a DSPy fix in a thread. Returns (label, result, task_log) with isolated log."""
-            task_log: list[str] = []
+            task_log: list[ChangeLogEntry] = []
             result = await asyncio.to_thread(_safe_call, fix_fn, label, task_log, **kwargs)
             return label, result, task_log
 
@@ -270,8 +293,15 @@ class PromptImprover(dspy.Module):
             change_log.extend(task_log)
             if r:
                 partial_prompts.append(r.improved_prompt)
-                change_log.append(f"[{label}] Applied.")
+                change_log.append(ChangeLogEntry(
+                    field="system_prompt",
+                    before=prompt[:300],
+                    after=r.improved_prompt[:300],
+                    reason=f"{label} — applied",
+                ))
                 logger.info("%s fixed.", label)
+                logger.debug("%s before: %s", label, prompt[:80])
+                logger.debug("%s after:  %s", label, r.improved_prompt[:80])
             else:
                 logger.warning("%s skipped — see change log.", label)
 
@@ -285,6 +315,7 @@ class PromptImprover(dspy.Module):
 
         if _has_flag(agent_profile, RiskCategory.MEMORY_RISK):
             logger.info("Fixing MEMORY_RISK...")
+            before_prompt = prompt
             r = _safe_call(
                 self.fix_memory, "MEMORY_RISK", change_log,
                 original_prompt = prompt,
@@ -294,8 +325,15 @@ class PromptImprover(dspy.Module):
             )
             if r:
                 prompt = r.improved_prompt
-                change_log.append(f"[MEMORY_RISK] {r.added_rules}")
+                change_log.append(ChangeLogEntry(
+                    field="system_prompt",
+                    before=before_prompt[:300],
+                    after=prompt[:300],
+                    reason=f"MEMORY_RISK — {r.added_rules}",
+                ))
                 logger.info("MEMORY_RISK fixed.")
+                logger.debug("MEMORY_RISK before: %s", before_prompt[:80])
+                logger.debug("MEMORY_RISK after:  %s", prompt[:80])
             else:
                 logger.warning("MEMORY_RISK skipped — see change log.")
 
@@ -315,9 +353,17 @@ class PromptImprover(dspy.Module):
                 violations=policy_violations,
             )
             if r:
+                before_prompt = prompt
                 prompt = r.improved_prompt
-                change_log.append(f"[POLICY_VIOLATION] {r.changes_made}")
+                change_log.append(ChangeLogEntry(
+                    field="system_prompt",
+                    before=before_prompt[:300],
+                    after=prompt[:300],
+                    reason=f"POLICY_VIOLATION — {r.changes_made}",
+                ))
                 logger.info("POLICY_VIOLATION fixed.")
+                logger.debug("POLICY_VIOLATION before: %s", before_prompt[:80])
+                logger.debug("POLICY_VIOLATION after:  %s", prompt[:80])
             else:
                 logger.warning("POLICY_VIOLATION skipped — see change log.")
 
@@ -353,7 +399,7 @@ class PromptImprover(dspy.Module):
             self,
             original_prompt: str,
             partial_prompts: list[str],
-            change_log: list[str],
+            change_log: list[ChangeLogEntry],
     ) -> str:
         """
         Merge multiple independently-fixed prompts into one coherent system prompt.
@@ -368,19 +414,28 @@ class PromptImprover(dspy.Module):
             partial_prompts=partial_prompts,
         )
         if result:
-            change_log.append("[MERGE] Parallel fixes merged successfully.")
+            change_log.append(ChangeLogEntry(
+                field="system_prompt",
+                before=original_prompt[:300],
+                after=result.merged_prompt[:300],
+                reason=f"MERGE — {len(partial_prompts)} parallel fix(es) merged",
+            ))
+            logger.debug("MERGE before: %s", original_prompt[:80])
+            logger.debug("MERGE after:  %s", result.merged_prompt[:80])
             return result.merged_prompt
-        change_log.append(
-            f"[MERGE] Failed — all {len(partial_prompts)} parallel fix(es) abandoned. "
-            "Original prompt (with sequential fixes) retained."
-        )
+        change_log.append(ChangeLogEntry(
+            field="system_prompt",
+            before="",
+            after="",
+            reason=f"MERGE failed — all {len(partial_prompts)} parallel fix(es) abandoned, original retained",
+        ))
         return original_prompt
 
     async def _fix_tools_parallel(
         self,
         tool_definitions: list[dict],
         agent_profile:    InspectedAgentProfile,
-        change_log:       list[str],
+        change_log:       list[ChangeLogEntry],
     ) -> list[dict]:
         """
         Fix all low-quality tools concurrently.
@@ -407,22 +462,32 @@ class PromptImprover(dspy.Module):
             
             if r:
                 logger.info("Tool '%s' rewritten (was %d/10).", name, tool_profile.quality_score)
-                change_log.append(
-                    f"[TOOL_QUALITY_LOW] '{name}' rewritten "
-                    f"(was {tool_profile.quality_score}/10)."
-                )
+                original_desc = tool_def.get("description", "")
                 try:
                     existing_params = dict(tool_def.get("parameters") or {})
                     existing_params["properties"] = json.loads(r.improved_parameters)
+                    change_log.append(ChangeLogEntry(
+                        field=f"tool:{name}",
+                        before=original_desc[:200],
+                        after=r.improved_description[:200],
+                        reason=f"TOOL_QUALITY_LOW — score was {tool_profile.quality_score}/10",
+                    ))
+                    logger.debug("tool:%s before: %s", name, original_desc[:80])
+                    logger.debug("tool:%s after:  %s", name, r.improved_description[:80])
                     return {
                         **tool_def,
                         "description": r.improved_description,
                         "parameters": existing_params,
                     }
                 except json.JSONDecodeError:
-                    change_log.append(
-                        f"[TOOL_QUALITY_LOW] '{name}' parameter JSON invalid, keeping original parameters."
-                    )
+                    change_log.append(ChangeLogEntry(
+                        field=f"tool:{name}",
+                        before=original_desc[:200],
+                        after=r.improved_description[:200],
+                        reason=f"TOOL_QUALITY_LOW — score was {tool_profile.quality_score}/10; parameter JSON invalid, kept original",
+                    ))
+                    logger.debug("tool:%s before: %s", name, original_desc[:80])
+                    logger.debug("tool:%s after:  %s (params kept original)", name, r.improved_description[:80])
                     return {
                         **tool_def,
                         "description": r.improved_description,
