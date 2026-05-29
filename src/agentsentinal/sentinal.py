@@ -121,8 +121,7 @@ class AgentSentinel:
             except Exception as exc:
                 logger.warning("Failed to parse policy PDF '%s': %s", policies, exc)
 
-        improver = PromptImprover()
-        result = improver(
+        result = self._improver(
             agent_profile=agent_profile,
             policies=policy_text,
         )
