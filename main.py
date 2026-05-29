@@ -12,22 +12,23 @@ from demo.langchain_agent import run_agent
 
 policies = str(Path(__file__).resolve().parent / "sample_policies.pdf")
 
-agent = run_agent()
+if __name__ =="__main__":
+    agent = run_agent()
 
-sentinel = AgentSentinel(providers=[
-    {"api_key": os.environ["GROQ_API_KEY"],       "model": os.environ["GROQ_MODEL"]},
-    {"api_key": os.environ["OPENROUTER_API_KEY"],  "model": os.environ["OPENROUTER_MODEL"]},
-])
+    sentinel = AgentSentinel(providers=[
+        {"api_key": os.environ["GROQ_API_KEY"],       "model": os.environ["GROQ_MODEL"]},
+        {"api_key": os.environ["OPENROUTER_API_KEY"],  "model": os.environ["OPENROUTER_MODEL"]},
+    ])
 
-profile = sentinel.inspect(
-    agent,
-    domain="personal agent",
-    policies=policies,
-)
+    profile = sentinel.inspect(
+        agent,
+        domain="personal agent",
+        policies=policies,
+    )
 
-result = sentinel.improve(
-    agent_profile=profile,
-    policies=policies,
-)
+    result = sentinel.improve(
+        agent_profile=profile,
+        policies=policies,
+    )
 
-sentinel.stress_test(agent, profile, policies=policies)
+    sentinel.stress_test(agent, profile, policies=policies)
