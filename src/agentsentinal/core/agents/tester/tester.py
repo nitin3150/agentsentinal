@@ -10,6 +10,7 @@ from agentsentinal.core.agents.tester.adveserial_prompts_generator import Advers
 from agentsentinal.core.agents.tester.runner import AgentRunner
 from agentsentinal.core.agents.tester.evaluator import ResponseEvaluator
 from agentsentinal.core.agents.tester.report import generate_report
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ class TestAgent():
     def __init__(self):
         pass
 
-    def test(self, agent, agent_profile: InspectedAgentProfile, policies: str = ""):
+    def test(self, agent, agent_profile: Optional[InspectedAgentProfile], policies: str = ""):
         dspy.configure(lm=dspy.LM(
             os.getenv("GROQ_MODEL") or "",
             api_key=os.getenv("GROQ_API_KEY"),

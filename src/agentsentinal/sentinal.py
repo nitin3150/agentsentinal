@@ -6,6 +6,7 @@ from agentsentinal.core.agents.inspector import InspectorAgent
 from agentsentinal.core.agents.intake.agent_intake import AgentIntake
 from agentsentinal.models.agent import InspectedAgentProfile, AgentProfile
 from agentsentinal.core.agents.improver.prompt_improver import PromptImprover
+from agentsentinal.core.agents.tester.tester import TestAgent
 import logging
 import os
 import dspy
@@ -127,8 +128,11 @@ class AgentSentinel:
         )
         return result
     
-    def stress_test(self):
-        pass
+    def stress_test(self, agent, profile: Optional[InspectedAgentProfile] = None, policies: str = ""):
+        if profile is None:
+            profile = self.inspect(agent, policies = policies)
+        test_agent = TestAgent()
+        test_agent.test(agent, profile, policies = policies)
 
     def certify(self,agent, domain:str="",system_prompt:str=""):
         result = self._invoke(self._inital_state(agent, domain=domain, system_prompt=system_prompt))
