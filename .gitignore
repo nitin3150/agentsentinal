@@ -5,3 +5,5 @@ __pycache__/
 
 adversarial_prompts.json
 agent_responses.json
+audit_report.json
+audit_report.md
