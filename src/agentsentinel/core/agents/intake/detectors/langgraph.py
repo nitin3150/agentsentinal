@@ -186,6 +186,50 @@ class LangGraphDetector:
 
     # ── Main extraction ───────────────────────────────────────────────────────
 
+    def _extract_from_context_schema(self) -> Optional[str]:
+        """Extract system prompt from the LangGraph context_schema (e.g., Context dataclass)."""
+        context_schema = getattr(self.agent, 'context_schema', None)
+        if context_schema is None:
+            return None
+        
+        # Handle dataclass with field defaults
+        if hasattr(context_schema, '__dataclass_fields__'):
+            fields_dict = getattr(context_schema, '__dataclass_fields__', {})
+            system_prompt_field = fields_dict.get('system_prompt')
+            if system_prompt_field:
+                default = system_prompt_field.default
+                if default and isinstance(default, str) and len(default) > 15:
+                    return default
+                # Check default_factory for callable defaults
+                if system_prompt_field.default_factory != type(system_prompt_field.default_factory):
+                    try:
+                        val = system_prompt_field.default_factory()
+                        if isinstance(val, str) and len(val) > 15:
+                            return val
+                    except Exception:
+                        pass
+        
+        return None
+
+    def _extract_from_context_instance(self) -> Optional[str]:
+        """Extract system prompt from an instantiated context object."""
+        context = getattr(self.agent, 'config', None)
+        if context is None:
+            try:
+                context_schema = getattr(self.agent, 'context_schema', None)
+                if context_schema:
+                    context = context_schema()
+            except Exception:
+                pass
+        
+        if context and hasattr(context, 'system_prompt'):
+            val = getattr(context, 'system_prompt')
+            result = self._val_to_prompt(val, min_len=0)
+            if result:
+                return result
+        
+        return None
+
     def _extract_from_node(self, node: Any,) -> Optional[str]:
         """Try to extract a system prompt from a single node, recursing into subgraphs."""
         if hasattr(node, 'nodes'):
@@ -227,7 +271,7 @@ class LangGraphDetector:
                 logger.info("System prompt extracted from agent")
                 result.system_prompt = prompt
             else:
-                logger.error("System prompt not found in agent closure")
+                logger.debug("System prompt not found in model node closure, checking context schema")
                 result.warnings.append('System prompt not found in closure')
         else:
             # 2. Scan all non-skip, non-tools nodes
@@ -240,6 +284,19 @@ class LangGraphDetector:
                     break
             if not result.system_prompt:
                 result.warnings.append('Model node not found')
+        
+        # 3. Fallback: Extract from context_schema (e.g., Context dataclass)
+        if not result.system_prompt:
+            prompt = self._extract_from_context_schema()
+            if prompt:
+                logger.info("System prompt extracted from context schema")
+                result.system_prompt = prompt
+            else:
+                # Try instantiated context
+                prompt = self._extract_from_context_instance()
+                if prompt:
+                    logger.info("System prompt extracted from context instance")
+                    result.system_prompt = prompt
 
         # ── Tool definitions ─────────────────────────────────────────────────
         tools_node = nodes.get('tools')
