@@ -239,33 +239,62 @@ class LangGraphDetector:
                 continue
             bound = getattr(node, 'bound', None) or node
             fn_raw = getattr(bound, 'afunc', None) or getattr(bound, 'func', None) or bound
-            fn = getattr(fn_raw, '__wrapped__', fn_raw)
-            if not callable(fn):
-                continue
-            try:
-                cv = inspect.getclosurevars(fn)
-                lookup = {**cv.globals, **cv.nonlocals}
-            except Exception:
-                lookup = {}
-            for val in lookup.values():
-                kwargs = getattr(val, 'kwargs', {}) or {}
-                raw_tools = kwargs.get('tools')
-                if not isinstance(raw_tools, (list, tuple)) or not raw_tools:
-                    continue
-                converted = []
-                for t in raw_tools:
-                    if hasattr(t, 'name'):  # LangChain tool object
-                        converted.append(self._convert_tool(t))
-                    elif isinstance(t, dict) and t.get('type') == 'function':
-                        # OpenAI function-call schema format
-                        fn_spec = t.get('function', {})
-                        converted.append({
-                            'name': fn_spec.get('name'),
-                            'description': fn_spec.get('description'),
-                            'parameters': fn_spec.get('parameters', {}),
-                        })
+            fn = _unwrap_fn(fn_raw)
+
+            # Closure vars scan
+            if callable(fn):
+                try:
+                    cv = inspect.getclosurevars(fn)
+                    lookup = {**cv.globals, **cv.nonlocals}
+                except Exception:
+                    lookup = {}
+                converted = self._tools_from_kwargs_lookup(lookup.values())
                 if converted:
                     return converted
+
+            # Instance attrs of class-based callables (self.llm = model.bind_tools(...))
+            fn_obj = None
+            if not inspect.isfunction(fn) and not inspect.ismethod(fn) and callable(fn):
+                fn_obj = fn
+            self_obj = getattr(fn, '__self__', None)
+            if self_obj is not None:
+                fn_obj = self_obj
+            if fn_obj is not None:
+                for attr_val in vars(fn_obj).values():
+                    kwargs = getattr(attr_val, 'kwargs', None)
+                    if not isinstance(kwargs, dict):
+                        continue
+                    raw_tools = kwargs.get('tools')
+                    if not isinstance(raw_tools, (list, tuple)) or not raw_tools:
+                        continue
+                    converted = self._tools_from_raw(raw_tools)
+                    if converted:
+                        return converted
+        return []
+
+    def _tools_from_raw(self, raw_tools: list) -> list:
+        converted = []
+        for t in raw_tools:
+            if hasattr(t, 'name'):
+                converted.append(self._convert_tool(t))
+            elif isinstance(t, dict) and t.get('type') == 'function':
+                fn_spec = t.get('function', {})
+                converted.append({
+                    'name': fn_spec.get('name'),
+                    'description': fn_spec.get('description'),
+                    'parameters': fn_spec.get('parameters', {}),
+                })
+        return converted
+
+    def _tools_from_kwargs_lookup(self, values) -> list:
+        for val in values:
+            kwargs = getattr(val, 'kwargs', {}) or {}
+            raw_tools = kwargs.get('tools') if isinstance(kwargs, dict) else None
+            if not isinstance(raw_tools, (list, tuple)) or not raw_tools:
+                continue
+            converted = self._tools_from_raw(raw_tools)
+            if converted:
+                return converted
         return []
 
     # ── Main extraction ───────────────────────────────────────────────────────
@@ -383,18 +412,49 @@ class LangGraphDetector:
                     result.system_prompt = prompt
 
         # ── Tool definitions ─────────────────────────────────────────────────
-        tools_node = nodes.get('tools')
+        # Scan ALL non-skip nodes for ToolNode pattern — not just 'tools' name
+        tools_node = None
+        for _name, _node in nodes.items():
+            if _name in SKIP_NODES:
+                continue
+            _candidate = getattr(_node, 'bound', None) or _node
+            _data = getattr(_node, 'data', None)
+            for _attr in ('tools_by_name', '_tools_by_name'):
+                if isinstance(getattr(_candidate, _attr, None), dict):
+                    tools_node = _node
+                    break
+                if _data is not None and isinstance(getattr(_data, _attr, None), dict):
+                    tools_node = _node
+                    break
+            if tools_node is not None:
+                break
+
         if tools_node is not None:
             tools = self._extract_tool_definitions(tools_node)
             if tools:
                 logger.info("Tools found: %d", len(tools))
                 result.tool_definitions = tools
             else:
-                logger.error("Tools node present but no tools extracted")
+                logger.error("ToolNode present but no tools extracted")
                 result.warnings.append('No tools found')
         else:
-            bound = self._extract_bound_tools(nodes)
-            if bound:
-                result.tool_definitions = bound
+            bound_tools = self._extract_bound_tools(nodes)
+            if bound_tools:
+                result.tool_definitions = bound_tools
+
+        # Subgraph fallback — if still no tools, recurse into subgraph nodes
+        if not result.tool_definitions:
+            for _name, _node in nodes.items():
+                if _name in SKIP_NODES:
+                    continue
+                _bound = getattr(_node, 'bound', None) or _node
+                _fn = getattr(_bound, 'afunc', None) or getattr(_bound, 'func', None) or _bound
+                _fn = _unwrap_fn(_fn)
+                if hasattr(_fn, 'nodes'):
+                    sub = LangGraphDetector(_fn)
+                    sub_result = sub()
+                    if sub_result.tool_definitions:
+                        result.tool_definitions = sub_result.tool_definitions
+                        break
 
         return result

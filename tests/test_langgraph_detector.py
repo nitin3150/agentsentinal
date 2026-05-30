@@ -468,6 +468,104 @@ class TestToolExtraction:
         assert result.tool_definitions == []
 
 
+# ── tool extraction gaps ──────────────────────────────────────────────────────
+
+class TestToolExtractionGaps:
+    def test_tool_node_with_non_tools_name(self):
+        """ToolNode named 'execute_tools' instead of 'tools' — still extracted."""
+        from langchain_core.tools import tool
+        from langgraph.prebuilt import ToolNode
+
+        @tool
+        def search(query: str) -> str:
+            """Search the web for a query."""
+            return query
+
+        g = StateGraph(State)
+        g.add_node("agent", lambda state: state)
+        g.add_node("execute_tools", ToolNode([search]))
+        g.set_entry_point("agent")
+        g.add_edge("agent", "execute_tools")
+        g.add_edge("execute_tools", END)
+        app = g.compile()
+
+        result = LangGraphDetector(app)()
+        assert len(result.tool_definitions) == 1
+        assert result.tool_definitions[0]["name"] == "search"
+
+    def test_tool_node_named_action(self):
+        """ToolNode named 'action' — extracted."""
+        from langchain_core.tools import tool
+        from langgraph.prebuilt import ToolNode
+
+        @tool
+        def lookup(record_id: str) -> str:
+            """Look up a record by id."""
+            return record_id
+
+        g = StateGraph(State)
+        g.add_node("agent", lambda state: state)
+        g.add_node("action", ToolNode([lookup]))
+        g.set_entry_point("agent")
+        g.add_edge("agent", "action")
+        g.add_edge("action", END)
+        app = g.compile()
+
+        result = LangGraphDetector(app)()
+        assert len(result.tool_definitions) == 1
+        assert result.tool_definitions[0]["name"] == "lookup"
+
+    def test_bind_tools_on_class_instance_attr(self):
+        """model.bind_tools(tools) stored as instance attr — not in closure."""
+        from langchain_core.tools import tool
+
+        @tool
+        def fetch(url: str) -> str:
+            """Fetch content from a URL."""
+            return url
+
+        class AgentNode:
+            def __init__(self, tools):
+                class _FakeBound:
+                    kwargs = {"tools": tools}
+                self.llm = _FakeBound()
+
+            def __call__(self, state):
+                return state
+
+        result = LangGraphDetector(_compile_graph(AgentNode([fetch])))()
+        assert len(result.tool_definitions) == 1
+        assert result.tool_definitions[0]["name"] == "fetch"
+
+    def test_tools_extracted_from_subgraph(self):
+        """Inner subgraph has a 'tools' node — outer graph extracts them."""
+        from langchain_core.tools import tool
+        from langgraph.prebuilt import ToolNode
+
+        @tool
+        def inner_tool(x: int) -> int:
+            """An inner subgraph tool."""
+            return x
+
+        inner_g = StateGraph(State)
+        inner_g.add_node("agent", lambda state: state)
+        inner_g.add_node("tools", ToolNode([inner_tool]))
+        inner_g.set_entry_point("agent")
+        inner_g.add_edge("agent", "tools")
+        inner_g.add_edge("tools", END)
+        inner_app = inner_g.compile()
+
+        outer_g = StateGraph(State)
+        outer_g.add_node("subagent", inner_app)
+        outer_g.set_entry_point("subagent")
+        outer_g.add_edge("subagent", END)
+        outer_app = outer_g.compile()
+
+        result = LangGraphDetector(outer_app)()
+        assert len(result.tool_definitions) == 1
+        assert result.tool_definitions[0]["name"] == "inner_tool"
+
+
 # ── subgraph recursion ────────────────────────────────────────────────────────
 
 class TestSubgraph:
