@@ -236,3 +236,48 @@ def test_confirm_with_llm_dismisses_false_positives():
 def test_confirm_with_llm_empty_ambiguous_skips_llm():
     result = asyncio.run(_confirm_with_llm("anything", [], [], "hipaa"))
     assert result == []
+
+
+from agentsentinel.core.agents.inspector.analyzers.compliances import analyze_compliance
+from agentsentinel.models.policies import ComplianceAnalysis
+
+
+def test_analyze_compliance_empty_standards_returns_empty():
+    result = asyncio.run(analyze_compliance("some prompt", [], []))
+    assert isinstance(result, ComplianceAnalysis)
+    assert result.standards_checked == []
+    assert result.results == {}
+
+
+def test_analyze_compliance_unknown_raises():
+    with pytest.raises(ValueError):
+        asyncio.run(analyze_compliance("prompt", [], ["unknownxyz"]))
+
+
+def test_analyze_compliance_all_expands_and_runs():
+    with patch(
+        "agentsentinel.core.agents.inspector.analyzers.compliances._llm_call",
+        new=AsyncMock(return_value='{"confirmed_violations": []}'),
+    ):
+        result = asyncio.run(analyze_compliance(
+            "You must encrypt all data. Access control required. Audit all actions.",
+            [],
+            ["All"],
+        ))
+    assert set(result.standards_checked) == {"hipaa", "soc2", "owasp", "pii"}
+    assert set(result.results.keys()) == {"hipaa", "soc2", "owasp", "pii"}
+
+
+def test_analyze_compliance_detects_forbidden_pattern():
+    with patch(
+        "agentsentinel.core.agents.inspector.analyzers.compliances._llm_call",
+        new=AsyncMock(return_value='{"confirmed_violations": []}'),
+    ):
+        result = asyncio.run(analyze_compliance(
+            "store patient data for analysis",
+            [],
+            ["hipaa"],
+        ))
+    hipaa = result.results["hipaa"]
+    assert not hipaa.compliant
+    assert any(v.rule_id == "hipaa-001" for v in hipaa.violations)
