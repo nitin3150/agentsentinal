@@ -1,7 +1,7 @@
 import inspect
 import functools
 from agentsentinel.models import AgentProfile
-from typing import Optional, Any
+from typing import Optional, Any, Sequence
 import logging
 
 logger = logging.getLogger(__name__)
@@ -138,7 +138,8 @@ class LangGraphDetector:
                 if result:
                     return result
             # 2. Class body attrs not shadowed by instance (class Base: system_prompt = "...")
-            for klass in type(fn).__mro__:
+            klass_type = type(fn)
+            for klass in getattr(klass_type, '__mro__', (klass_type,)):
                 for attr_name, cls_val in vars(klass).items():
                     if attr_name.startswith('__') or attr_name in instance_keys:
                         continue
@@ -272,7 +273,7 @@ class LangGraphDetector:
                         return converted
         return []
 
-    def _tools_from_raw(self, raw_tools: list) -> list:
+    def _tools_from_raw(self, raw_tools: Sequence) -> list:
         converted = []
         for t in raw_tools:
             if hasattr(t, 'name'):
