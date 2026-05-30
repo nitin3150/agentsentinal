@@ -1,5 +1,6 @@
 from agentsentinel.models import AgentProfile
 from agentsentinel.core.agents.intake.detectors.langgraph import LangGraphDetector
+from agentsentinel.core.agents.intake.detectors.filepath import FilePathDetector
 from typing import Optional
 import logging
 
@@ -7,8 +8,9 @@ logger = logging.getLogger(__name__)
 
 class AgentIntake:
     def __init__(self):
-        self._detectors=[
-            LangGraphDetector
+        self._detectors = [
+            FilePathDetector,
+            LangGraphDetector,
         ]
 
     def extract_profile(self, agent, agent_profile: Optional[AgentProfile] = None) -> AgentProfile:
