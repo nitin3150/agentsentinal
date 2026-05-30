@@ -205,6 +205,55 @@ class TestPromptValueTypes:
         result = LangGraphDetector(_compile_graph(AgentNode()))()
         assert result.system_prompt == "You are a class-based agent assistant."
 
+    def test_prompt_template(self):
+        """Plain PromptTemplate has .template directly — not .messages."""
+        from langchain_core.prompts import PromptTemplate
+        def make():
+            prompt = PromptTemplate.from_template(
+                "You are a PromptTemplate assistant answering {question}."
+            )
+            def node(state):
+                _ = prompt
+                return state
+            return node
+        result = LangGraphDetector(_compile_graph(make()))()
+        assert "You are a PromptTemplate assistant" in result.system_prompt
+
+    def test_model_bind_system_kwarg(self):
+        """System prompt in model.bind(system=...) kwargs dict."""
+        class FakeBoundModel:
+            kwargs = {"system": "You are a bound-model assistant."}
+            def __call__(self, state):
+                return state
+
+        def make():
+            llm = FakeBoundModel()
+            def node(state):
+                _ = llm
+                return state
+            return node
+        result = LangGraphDetector(_compile_graph(make()))()
+        assert result.system_prompt == "You are a bound-model assistant."
+
+    def test_function_default_arg_prompt(self):
+        """System prompt as a default argument value on the node function."""
+        def node(state, system_prompt="You are a default-arg assistant."):
+            return state
+        result = LangGraphDetector(_compile_graph(node))()
+        assert result.system_prompt == "You are a default-arg assistant."
+
+    def test_pydantic_state_model_default(self):
+        """System prompt as Pydantic v2 model field default (not dataclass)."""
+        from pydantic import BaseModel as PydanticBase
+
+        class Config(PydanticBase):
+            system_prompt: str = "You are a Pydantic-state assistant."
+
+        app = _compile_graph(lambda state: state)
+        app.context_schema = Config
+        result = LangGraphDetector(app)()
+        assert result.system_prompt == "You are a Pydantic-state assistant."
+
 
 # ── node name routing ─────────────────────────────────────────────────────────
 

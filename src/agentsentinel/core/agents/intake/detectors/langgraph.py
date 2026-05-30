@@ -57,6 +57,10 @@ class LangGraphDetector:
                     tmpl = msg_tpl.prompt.template
                     if isinstance(tmpl, str) and len(tmpl) > min_len:
                         return tmpl
+        # PromptTemplate — has .template directly (no .messages)
+        template = getattr(val, 'template', None)
+        if isinstance(template, str) and len(template) > min_len:
+            return template
         # List/tuple of messages — find first SystemMessage
         if isinstance(val, (list, tuple)):
             for item in val:
@@ -65,6 +69,15 @@ class LangGraphDetector:
                 role = getattr(item, 'type', '') or getattr(item, 'role', '')
                 if 'system' in str(role).lower():
                     return item.content
+        # model.bind(system=...) or model.bind(system_prompt=...) stored in .kwargs
+        kwargs = getattr(val, 'kwargs', None)
+        if isinstance(kwargs, dict):
+            for key in ('system', 'system_prompt', 'system_message'):
+                sys_val = kwargs.get(key)
+                if sys_val is not None:
+                    inner = self._val_to_prompt(sys_val, min_len=min_len)
+                    if inner:
+                        return inner
         return None
 
     def _extract_system_prompt(self, model_node: Any) -> Optional[str]:
@@ -119,6 +132,22 @@ class LangGraphDetector:
             result = self._val_to_prompt(val, min_len=15)
             if result:
                 return result
+
+        # Function default arguments — def node(state, system_prompt="...")
+        if hasattr(fn, '__code__') and hasattr(fn, '__defaults__'):
+            defaults = fn.__defaults__ or ()
+            kwdefaults = getattr(fn, '__kwdefaults__', None) or {}
+            varnames = fn.__code__.co_varnames[:fn.__code__.co_argcount]
+            for name, val in zip(reversed(varnames), reversed(defaults)):
+                if name in _PROMPT_VAR_NAMES:
+                    result = self._val_to_prompt(val, min_len=0)
+                    if result:
+                        return result
+            for name, val in kwdefaults.items():
+                if name in _PROMPT_VAR_NAMES:
+                    result = self._val_to_prompt(val, min_len=0)
+                    if result:
+                        return result
 
         return None
 
