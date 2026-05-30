@@ -21,12 +21,20 @@ class LangGraphDetector:
         self.agent = agent
 
     def can_handle(self) -> bool:
-        try:
-            from langgraph.pregel.main import Pregel
-            logger.info("Framework: LangGraph")
-            return isinstance(self.agent, Pregel)
-        except ImportError:
-            return hasattr(self.agent, 'nodes')
+        import importlib
+        pregel_class = None
+        for import_path in ('langgraph.pregel', 'langgraph.pregel.main'):
+            try:
+                mod = importlib.import_module(import_path)
+                pregel_class = getattr(mod, 'Pregel', None)
+                if pregel_class is not None:
+                    break
+            except ImportError:
+                continue
+        if pregel_class is None:
+            return False
+        logger.info("Framework: LangGraph")
+        return isinstance(self.agent, pregel_class)
 
     # ── Prompt helpers ────────────────────────────────────────────────────────
 

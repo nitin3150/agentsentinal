@@ -395,16 +395,17 @@ class TestAgentIntake:
         profile = AgentIntake().extract_profile(RandomObject(), agent_profile=override)
         assert profile.system_prompt == "Fallback prompt."
 
-    def test_prompt_stripped_of_newlines_and_dots(self):
-        """AgentIntake post-processes: strips newlines and dots from prompt."""
+    def test_prompt_stripped_of_leading_trailing_newlines(self):
+        """AgentIntake strips leading/trailing newlines but preserves periods."""
         def make():
-            system_prompt = "You are helpful.\nBe concise."
+            system_prompt = "\nYou are helpful. Be concise.\n"
             def node(state):
                 _ = system_prompt
                 return state
             return node
         app = _compile_graph(make())
         profile = AgentIntake().extract_profile(app)
-        assert "\n" not in profile.system_prompt
-        assert "." not in profile.system_prompt
+        assert not profile.system_prompt.startswith("\n")
+        assert not profile.system_prompt.endswith("\n")
+        assert profile.system_prompt.endswith(".")  # period preserved
 
