@@ -4,6 +4,7 @@ from typing import Optional
 from agentsentinel.core.agents.inspector.analyzers.framework import FrameworkAnalysis
 from agentsentinel.core.agents.inspector.analyzers.memory import MemoryAnalysis
 from agentsentinel.core.agents.inspector.analyzers.policy import PolicyAnalysis
+from agentsentinel.models.policies import ComplianceAnalysis
 from agentsentinel.core.agents.inspector.analyzers.prompt import PromptAnalysis
 from agentsentinel.core.agents.inspector.analyzers.semantic import SemanticAnalysis
 from agentsentinel.core.agents.inspector.analyzers.tools import ToolsAnalysis
@@ -72,6 +73,7 @@ def aggregate(
     framework: Optional[FrameworkAnalysis],
     semantic: Optional[SemanticAnalysis],
     policy: Optional[PolicyAnalysis] = None,
+    compliance: Optional[ComplianceAnalysis] = None,
 ) -> InspectedAgentProfile:
     flags: list[RiskFlag] = []
     ambiguous: list[str] = []
@@ -139,6 +141,9 @@ def aggregate(
             policy_violations=[v.description for v in policy.violations],
         )
         flags.extend(policy.risk_flags)
+
+    if compliance is not None:
+        profile_kwargs["compliance_results"] = compliance.results
 
     # De-dupe ambiguous phrases while preserving order.
     seen: set[str] = set()

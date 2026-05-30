@@ -353,3 +353,43 @@ def test_confirm_with_llm_handles_trailing_comma_json():
         result = asyncio.run(_confirm_with_llm("prompt", [], [rule], "hipaa"))
     assert len(result) == 1
     assert result[0].rule_id == "hipaa-002"
+
+
+from agentsentinel.models import AgentProfile
+from agentsentinel.core.agents.inspector.orchestrator import InspectorAgent
+
+
+def test_orchestrator_compliance_surfaces_in_profile():
+    with patch(
+        "agentsentinel.core.agents.inspector.analyzers.compliances._llm_call",
+        new=AsyncMock(return_value='{"confirmed_violations": []}'),
+    ), patch(
+        "agentsentinel.core.agents.inspector.analyzers.semantic.analyze_semantic",
+        new=AsyncMock(return_value=None),
+    ), patch(
+        "agentsentinel.core.agents.inspector.analyzers.policy.analyze_policy",
+        new=AsyncMock(return_value=None),
+    ):
+        profile = AgentProfile(
+            system_prompt="store patient data for analysis. You help users.",
+        )
+        inspector = InspectorAgent(semantic_enabled=False)
+        result = asyncio.run(inspector.inspect(profile, compliance=["hipaa"]))
+
+    assert "hipaa" in result.compliance_results
+    assert not result.compliance_results["hipaa"].compliant
+
+
+def test_orchestrator_empty_compliance_leaves_results_empty():
+    with patch(
+        "agentsentinel.core.agents.inspector.analyzers.semantic.analyze_semantic",
+        new=AsyncMock(return_value=None),
+    ), patch(
+        "agentsentinel.core.agents.inspector.analyzers.policy.analyze_policy",
+        new=AsyncMock(return_value=None),
+    ):
+        profile = AgentProfile(system_prompt="You are a helpful assistant.")
+        inspector = InspectorAgent(semantic_enabled=False)
+        result = asyncio.run(inspector.inspect(profile))
+
+    assert result.compliance_results == {}

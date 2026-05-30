@@ -76,13 +76,21 @@ class InspectorAgent:
                 logger.warning("Failed to parse policy PDF '%s': %s", policies, exc)
                 extraction.warnings.append(f"Policy PDF could not be parsed: {exc}")
 
-        if len(compliance) >= 1:
+        compliance_res = None
+        if compliance:
             try:
-                compliance_res = await analyze_compliance(extraction.system_prompt, extraction.tool_definitions, compliance)
-                logger.info(f"Compliance result: {compliance_res}")
-            except Exception as e:
-                logger.warning("Failed to Read the Compliance: %s", e)
-                extraction.warnings.append(f"Compliances could not be parsed: {e}")
+                compliance_res = await analyze_compliance(
+                    extraction.system_prompt,
+                    extraction.tool_definitions,
+                    compliance,
+                )
+                logger.info("Compliance result: %s", compliance_res)
+            except ValueError as exc:
+                logger.error("Compliance standard error: %s", exc)
+                raise
+            except Exception as exc:
+                logger.warning("Compliance analysis failed: %s", exc)
+                extraction.warnings.append(f"Compliance analysis failed: {exc}")
         try:
             logger.info("Analysing Prompt...")
             prompt_res = analyze_prompt(extraction.system_prompt)
@@ -152,6 +160,7 @@ class InspectorAgent:
             framework=framework,
             semantic=semantic,
             policy=policy,
+            compliance=compliance_res,
         )
 
     async def _run_semantic(
