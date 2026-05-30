@@ -33,7 +33,10 @@ _PROMPT_VAR_NAMES = (
 
 
 class LangGraphDetector:
-    MODEL_NODE_NAMES = ('model', 'agent')
+    MODEL_NODE_NAMES = (
+        'model', 'agent', 'assistant', 'chatbot',
+        'llm', 'call_model', 'generate', 'reasoner',
+    )
 
     def __init__(self, agent):
         self.agent = agent

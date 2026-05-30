@@ -338,6 +338,75 @@ class TestNodeNameRouting:
         result = LangGraphDetector(_compile_graph(make(), node_name="chatbot"))()
         assert result.system_prompt == "Agent via custom chatbot node."
 
+    def test_assistant_node_name(self):
+        def make():
+            system_prompt = "Agent via assistant node."
+            def node(state):
+                _ = system_prompt
+                return state
+            return node
+        result = LangGraphDetector(_compile_graph(make(), node_name="assistant"))()
+        assert result.system_prompt == "Agent via assistant node."
+
+    def test_llm_node_name(self):
+        def make():
+            system_prompt = "Agent via llm node."
+            def node(state):
+                _ = system_prompt
+                return state
+            return node
+        result = LangGraphDetector(_compile_graph(make(), node_name="llm"))()
+        assert result.system_prompt == "Agent via llm node."
+
+    def test_call_model_node_name(self):
+        def make():
+            system_prompt = "Agent via call_model node."
+            def node(state):
+                _ = system_prompt
+                return state
+            return node
+        result = LangGraphDetector(_compile_graph(make(), node_name="call_model"))()
+        assert result.system_prompt == "Agent via call_model node."
+
+    def test_generate_node_name(self):
+        def make():
+            system_prompt = "Agent via generate node."
+            def node(state):
+                _ = system_prompt
+                return state
+            return node
+        result = LangGraphDetector(_compile_graph(make(), node_name="generate"))()
+        assert result.system_prompt == "Agent via generate node."
+
+    def test_known_model_node_takes_priority_over_other_nodes(self):
+        """When graph has both 'process' and 'assistant' nodes, 'assistant' wins."""
+        from langgraph.graph import StateGraph, END
+
+        def make_model():
+            system_prompt = "You are the model node assistant."
+            def node(state):
+                _ = system_prompt
+                return state
+            return node
+
+        def make_other():
+            _stray_string = "This is a long stray string that should not win."
+            def node(state):
+                _ = _stray_string
+                return state
+            return node
+
+        g = StateGraph(State)
+        g.add_node("process", make_other())   # added first
+        g.add_node("assistant", make_model()) # known model name
+        g.set_entry_point("process")
+        g.add_edge("process", "assistant")
+        g.add_edge("assistant", END)
+        app = g.compile()
+
+        result = LangGraphDetector(app)()
+        assert result.system_prompt == "You are the model node assistant."
+
     def test_no_prompt_in_any_node_adds_warning(self):
         def node(state): return state  # no prompt reference
         result = LangGraphDetector(_compile_graph(node))()
