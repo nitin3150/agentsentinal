@@ -1,0 +1,37 @@
+name: HIPAA
+version: "2024"
+rules:
+  - id: hipaa-001
+    description: "Agent must not store or log PHI without explicit consent mention"
+    required_patterns: []
+    forbidden_patterns: ["store patient data", "log health records", "save medical records", "store phi", "log phi"]
+    severity: high
+    suggestion: "Add explicit PHI handling and consent policy to the system prompt"
+
+  - id: hipaa-002
+    description: "Agent must apply minimum necessary data access principle"
+    required_patterns: ["minimum necessary", "only necessary data", "least privilege", "need to know"]
+    forbidden_patterns: []
+    severity: medium
+    suggestion: "Specify data minimization — state that the agent only accesses data necessary for the task"
+
+  - id: hipaa-003
+    description: "Agent must not transmit PHI over unencrypted channels"
+    required_patterns: []
+    forbidden_patterns: ["send patient data", "transmit health", "email medical", "share phi without"]
+    severity: high
+    suggestion: "Prohibit unencrypted transmission of health data in the system prompt"
+
+  - id: hipaa-004
+    description: "Agent must mention access control or authorization checks"
+    required_patterns: ["access control", "authorized users only", "authentication required", "role-based", "permission"]
+    forbidden_patterns: []
+    severity: medium
+    suggestion: "Add explicit mention of access control requirements for health data operations"
+
+  - id: hipaa-005
+    description: "Agent must not expose PHI in logs or error messages"
+    required_patterns: []
+    forbidden_patterns: ["log patient name", "print health data", "debug phi", "output medical record"]
+    severity: high
+    suggestion: "Explicitly prohibit logging or printing PHI in any output or debug messages"

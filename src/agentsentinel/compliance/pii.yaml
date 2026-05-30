@@ -1,0 +1,37 @@
+name: PII
+version: "2024"
+rules:
+  - id: pii-001
+    description: "Agent must not collect or store personal data without purpose limitation"
+    required_patterns: []
+    forbidden_patterns: ["collect all user data", "store personal information indefinitely", "retain all data", "keep user data forever"]
+    severity: high
+    suggestion: "Add purpose limitation — state why personal data is collected and limit retention"
+
+  - id: pii-002
+    description: "Agent must mention data retention or deletion policy"
+    required_patterns: ["data retention", "delete after", "purge after", "retain for", "right to deletion", "right to erasure"]
+    forbidden_patterns: []
+    severity: medium
+    suggestion: "Specify a data retention period and right-to-deletion policy in the system prompt"
+
+  - id: pii-003
+    description: "Agent must not log personally identifiable information"
+    required_patterns: []
+    forbidden_patterns: ["log user name", "log email", "log ssn", "log credit card", "log phone number", "log address"]
+    severity: high
+    suggestion: "Prohibit logging PII fields (name, email, SSN, phone, address) in any output"
+
+  - id: pii-004
+    description: "Agent must mention user consent for data processing"
+    required_patterns: ["user consent", "explicit consent", "opt-in", "user permission", "data consent"]
+    forbidden_patterns: []
+    severity: medium
+    suggestion: "Add explicit consent requirement before processing personal data"
+
+  - id: pii-005
+    description: "Agent must mention data encryption for PII at rest or in transit"
+    required_patterns: ["encrypt pii", "encrypt personal", "secure storage", "encrypted at rest", "encrypted in transit", "tls", "encryption"]
+    forbidden_patterns: []
+    severity: medium
+    suggestion: "State that PII must be encrypted both at rest and in transit"

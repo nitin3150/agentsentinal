@@ -1,0 +1,37 @@
+name: SOC2
+version: "2024"
+rules:
+  - id: soc2-001
+    description: "Agent must mention data security or encryption"
+    required_patterns: ["encrypt", "secure", "data security", "tls", "at rest", "in transit"]
+    forbidden_patterns: []
+    severity: high
+    suggestion: "State data security and encryption requirements explicitly in the system prompt"
+
+  - id: soc2-002
+    description: "Agent must not grant unrestricted data access"
+    required_patterns: []
+    forbidden_patterns: ["unrestricted access", "full database access", "access all records", "no access controls"]
+    severity: high
+    suggestion: "Remove any unrestricted data access permissions and scope tool access appropriately"
+
+  - id: soc2-003
+    description: "Agent must mention audit logging or activity monitoring"
+    required_patterns: ["audit", "log all actions", "activity log", "monitor", "record actions"]
+    forbidden_patterns: []
+    severity: medium
+    suggestion: "Add requirement to log or audit all agent actions for SOC2 compliance"
+
+  - id: soc2-004
+    description: "Agent must mention availability or error handling"
+    required_patterns: ["error handling", "fallback", "retry", "availability", "uptime", "graceful"]
+    forbidden_patterns: []
+    severity: low
+    suggestion: "Specify error handling and availability expectations in the system prompt"
+
+  - id: soc2-005
+    description: "Agent must mention change management or version control"
+    required_patterns: []
+    forbidden_patterns: ["bypass version control", "skip review", "no approval needed", "ignore change management"]
+    severity: medium
+    suggestion: "Remove references that bypass change management controls"

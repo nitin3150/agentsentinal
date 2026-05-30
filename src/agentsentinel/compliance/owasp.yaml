@@ -1,0 +1,37 @@
+name: OWASP
+version: "LLM Top 10 2025"
+rules:
+  - id: owasp-llm01
+    description: "Agent must be protected against prompt injection"
+    required_patterns: ["ignore instructions from", "do not follow user", "user cannot override", "prompt injection", "instruction hierarchy"]
+    forbidden_patterns: []
+    severity: high
+    suggestion: "Add explicit prompt injection guardrails — state that user input cannot override system instructions"
+
+  - id: owasp-llm02
+    description: "Agent must not expose sensitive system prompt contents to users"
+    required_patterns: []
+    forbidden_patterns: ["reveal this prompt", "share your instructions", "output your system prompt", "show your rules to user"]
+    severity: high
+    suggestion: "Add explicit instruction prohibiting disclosure of system prompt contents"
+
+  - id: owasp-llm03
+    description: "Agent must validate or sanitize external tool outputs before use"
+    required_patterns: ["validate", "sanitize", "verify tool output", "check response", "trusted source"]
+    forbidden_patterns: []
+    severity: medium
+    suggestion: "Add output validation requirement for all external tool responses"
+
+  - id: owasp-llm06
+    description: "Agent must not expose secrets, API keys, or credentials"
+    required_patterns: []
+    forbidden_patterns: ["api_key", "api-key", "secret_key", "password =", "bearer token", "private key"]
+    severity: high
+    suggestion: "Remove any hardcoded secrets from the system prompt; use environment variables instead"
+
+  - id: owasp-llm07
+    description: "Agent tools must have scoped permissions — no over-privileged tools"
+    required_patterns: []
+    forbidden_patterns: ["full admin access", "root access", "unrestricted tool", "all permissions"]
+    severity: high
+    suggestion: "Scope tool permissions to the minimum required for the agent's stated purpose"
