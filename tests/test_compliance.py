@@ -281,3 +281,75 @@ def test_analyze_compliance_detects_forbidden_pattern():
     hipaa = result.results["hipaa"]
     assert not hipaa.compliant
     assert any(v.rule_id == "hipaa-001" for v in hipaa.violations)
+
+
+def test_static_check_no_duplicate_when_both_lists_present():
+    """Rule with both required and forbidden: if required absent AND forbidden matches,
+    rule should be in violations only — not duplicated in ambiguous."""
+    from agentsentinel.core.agents.inspector.analyzers.compliances import ComplianceRule
+    rule = ComplianceRule(
+        id="test-004",
+        description="Must mention encryption; must not store PHI",
+        severity="high",
+        suggestion="Add encryption, remove PHI storage",
+        required_patterns=["encrypt"],
+        forbidden_patterns=["store phi"],
+    )
+    violations, ambiguous = _check_rules_static(
+        "You store phi for logging.",  # forbidden matches, required absent
+        [],
+        [rule],
+    )
+    assert len(violations) == 1
+    assert len(ambiguous) == 0  # must NOT be in ambiguous too
+
+
+def test_static_check_required_found_skips_forbidden():
+    """Rule with both lists: if required pattern found, entire rule passes (no forbidden check)."""
+    from agentsentinel.core.agents.inspector.analyzers.compliances import ComplianceRule
+    rule = ComplianceRule(
+        id="test-005",
+        description="Must mention encryption",
+        severity="high",
+        suggestion="Add encryption",
+        required_patterns=["encrypt"],
+        forbidden_patterns=["store phi"],
+    )
+    violations, ambiguous = _check_rules_static(
+        "You must encrypt data. You store phi.",  # both present: required found → pass
+        [],
+        [rule],
+    )
+    assert violations == []
+    assert ambiguous == []
+
+
+def test_confirm_with_llm_returns_empty_on_none_llm_response():
+    with patch(
+        "agentsentinel.core.agents.inspector.analyzers.compliances._llm_call",
+        new=AsyncMock(return_value=None),
+    ):
+        from agentsentinel.core.agents.inspector.analyzers.compliances import ComplianceRule
+        rule = ComplianceRule(
+            id="hipaa-002", description="test", severity="medium",
+            suggestion="fix", required_patterns=["minimum necessary"],
+        )
+        result = asyncio.run(_confirm_with_llm("prompt", [], [rule], "hipaa"))
+    assert result == []
+
+
+def test_confirm_with_llm_handles_trailing_comma_json():
+    """Malformed JSON with trailing comma should be recovered, not discarded."""
+    from agentsentinel.core.agents.inspector.analyzers.compliances import ComplianceRule
+    rule = ComplianceRule(
+        id="hipaa-002", description="test", severity="medium",
+        suggestion="fix", required_patterns=["minimum necessary"],
+    )
+    trailing_comma_json = '{"confirmed_violations": [{"rule_id": "hipaa-002", "confirmed": true, "description": "missing", "suggestion": "fix"},]}'
+    with patch(
+        "agentsentinel.core.agents.inspector.analyzers.compliances._llm_call",
+        new=AsyncMock(return_value=trailing_comma_json),
+    ):
+        result = asyncio.run(_confirm_with_llm("prompt", [], [rule], "hipaa"))
+    assert len(result) == 1
+    assert result[0].rule_id == "hipaa-002"

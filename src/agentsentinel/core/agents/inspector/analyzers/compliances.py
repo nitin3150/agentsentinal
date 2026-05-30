@@ -91,7 +91,7 @@ def _check_rules_static(
     """Rule-based pattern check (OR semantics for both lists).
 
     Returns:
-        violations: rules with a forbidden pattern match
+        violations: rules with a confirmed forbidden pattern match
         ambiguous: rules whose required patterns were all absent (LLM will confirm)
     """
     text = system_prompt.lower()
@@ -105,11 +105,11 @@ def _check_rules_static(
     ambiguous: list[ComplianceRule] = []
 
     for rule in rules:
-        # If required_patterns are specified and at least one is found, the rule passes.
+        # If required patterns present and any found, rule passes entirely — skip further checks.
         if rule.required_patterns and any(p in combined for p in rule.required_patterns):
             continue
 
-        # Required patterns absent (or none specified) — check forbidden patterns.
+        matched_forbidden = False
         for pattern in rule.forbidden_patterns:
             if pattern in combined:
                 violations.append(ComplianceViolation(
@@ -118,10 +118,11 @@ def _check_rules_static(
                     severity=RiskLevel(rule.severity),
                     suggestion=rule.suggestion,
                 ))
+                matched_forbidden = True
                 break
 
-        # If required_patterns were specified but none found, flag as ambiguous for LLM.
-        if rule.required_patterns and not any(p in combined for p in rule.required_patterns):
+        # Only flag as ambiguous if required patterns were absent AND no forbidden match occurred.
+        if rule.required_patterns and not matched_forbidden:
             ambiguous.append(rule)
 
     return violations, ambiguous
@@ -198,12 +199,22 @@ async def _llm_call(prompt: str) -> str | None:
     return None
 
 
-def _strip_fences(text: str) -> str:
-    text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-    return text.strip()
+def _tolerant_json_load(text: str) -> dict | None:
+    """Strip markdown fences, then attempt JSON parse with trailing-comma recovery."""
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+    cleaned = cleaned.strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+    recovered = re.sub(r",(\s*[}\]])", r"\1", cleaned)
+    try:
+        return json.loads(recovered)
+    except json.JSONDecodeError:
+        return None
 
 
 async def _confirm_with_llm(
@@ -237,9 +248,8 @@ async def _confirm_with_llm(
     if not raw:
         return []
 
-    try:
-        payload = json.loads(_strip_fences(raw))
-    except json.JSONDecodeError:
+    payload = _tolerant_json_load(raw)
+    if not isinstance(payload, dict):
         logger.warning("Compliance LLM returned unparseable JSON for standard '%s'", standard)
         return []
 
