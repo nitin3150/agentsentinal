@@ -48,3 +48,10 @@ def test_riskcat_has_compliance_violation():
 def test_inspected_profile_has_compliance_results():
     p = InspectedAgentProfile(agent_id="test")
     assert p.compliance_results == {}
+
+
+def test_inspected_profile_compliance_results_populated():
+    from agentsentinel.models.policies import ComplianceStandardResult
+    result = ComplianceStandardResult(compliant=True)
+    p = InspectedAgentProfile(agent_id="test", compliance_results={"hipaa": result})
+    assert p.compliance_results["hipaa"].compliant is True

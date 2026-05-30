@@ -6,6 +6,11 @@ from agentsentinel.models.agent import (
     RiskCategory,
     ToolProfile,
 )
+from agentsentinel.models.policies import (
+    ComplianceViolation,
+    ComplianceStandardResult,
+    ComplianceAnalysis,
+)
 
 __all__ = [
     "AgentProfile",
@@ -14,4 +19,7 @@ __all__ = [
     "RiskLevel",
     "RiskCategory",
     "ToolProfile",
+    "ComplianceViolation",
+    "ComplianceStandardResult",
+    "ComplianceAnalysis",
 ]
