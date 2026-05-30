@@ -97,6 +97,17 @@ class TestPromptFromVariableName:
         result = LangGraphDetector(_compile_graph(make()))()
         assert result.system_prompt == "You are a support agent."
 
+    def test_state_modifier_var(self):
+        """state_modifier (singular) extracted even when <15 chars — known-name scan, not fallback."""
+        def make():
+            state_modifier = "Be concise."  # short — fallback scan misses it, known-name must catch
+            def node(state):
+                _ = state_modifier
+                return state
+            return node
+        result = LangGraphDetector(_compile_graph(make()))()
+        assert result.system_prompt == "Be concise."
+
     def test_nonstandard_var_long_string_extracted(self):
         """Unknown var name with len > 15 — picked up by fallback scan."""
         def make():
@@ -396,3 +407,4 @@ class TestAgentIntake:
         profile = AgentIntake().extract_profile(app)
         assert "\n" not in profile.system_prompt
         assert "." not in profile.system_prompt
+

@@ -9,7 +9,7 @@ SKIP_NODES = {'__start__', '__end__'}
 
 # Known variable names that hold system prompts
 _PROMPT_VAR_NAMES = (
-    'system_prompt', 'system_message', 'prompt', 'state_modifiers',
+    'system_prompt', 'system_message', 'prompt', 'state_modifiers', 'state_modifier',
     'instructions', 'system', 'sys_prompt', 'SYSTEM', 'SYSTEM_PROMPT',
 )
 
