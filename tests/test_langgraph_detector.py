@@ -255,6 +255,55 @@ class TestPromptValueTypes:
         assert result.system_prompt == "You are a Pydantic-state assistant."
 
 
+# ── extraction paths ─────────────────────────────────────────────────────────
+
+class TestExtractionPaths:
+    def test_functools_partial_double_wrap(self):
+        """Double-wrapped functools.partial — both layers unwrapped."""
+        import functools
+
+        def make():
+            system_prompt = "You are a partial-wrapped assistant."
+            def inner(state):
+                _ = system_prompt
+                return state
+            return functools.partial(functools.partial(inner))
+
+        result = LangGraphDetector(_compile_graph(make()))()
+        assert result.system_prompt == "You are a partial-wrapped assistant."
+
+    def test_inherited_class_attr_prompt(self):
+        """System prompt defined on parent class body, not instance __dict__."""
+        class BaseAgent:
+            system_prompt = "You are an inherited-attr assistant."
+
+        class ConcreteAgent(BaseAgent):
+            def __call__(self, state):
+                return state
+
+        result = LangGraphDetector(_compile_graph(ConcreteAgent()))()
+        assert result.system_prompt == "You are an inherited-attr assistant."
+
+    def test_runnable_sequence_prompt_in_steps(self):
+        """Node is prompt | llm chain — prompt extracted from .steps[0]."""
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.runnables import RunnableLambda
+
+        chain = ChatPromptTemplate.from_messages([
+            ("system", "You are a RunnableSequence assistant."),
+            ("human", "{input}"),
+        ]) | RunnableLambda(lambda x: x)
+
+        g = StateGraph(State)
+        g.add_node("agent", chain)
+        g.set_entry_point("agent")
+        g.add_edge("agent", END)
+        app = g.compile()
+
+        result = LangGraphDetector(app)()
+        assert result.system_prompt == "You are a RunnableSequence assistant."
+
+
 # ── node name routing ─────────────────────────────────────────────────────────
 
 class TestNodeNameRouting:

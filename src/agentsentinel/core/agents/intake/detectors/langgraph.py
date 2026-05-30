@@ -1,4 +1,5 @@
 import inspect
+import functools
 from agentsentinel.models import AgentProfile
 from typing import Optional, Any
 import logging
@@ -6,6 +7,23 @@ import logging
 logger = logging.getLogger(__name__)
 
 SKIP_NODES = {'__start__', '__end__'}
+
+
+def _unwrap_fn(fn: Any) -> Any:
+    """Recursively unwrap __wrapped__ and functools.partial layers."""
+    seen: set = set()
+    while True:
+        fid = id(fn)
+        if fid in seen:
+            break
+        seen.add(fid)
+        if hasattr(fn, '__wrapped__'):
+            fn = fn.__wrapped__
+        elif isinstance(fn, functools.partial):
+            fn = fn.func
+        else:
+            break
+    return fn
 
 # Known variable names that hold system prompts
 _PROMPT_VAR_NAMES = (
@@ -82,22 +100,48 @@ class LangGraphDetector:
 
     def _extract_system_prompt(self, model_node: Any) -> Optional[str]:
         bound = getattr(model_node, 'bound', None) or model_node
+
+        # RunnableSequence (prompt | llm) — not __call__-able, check .steps before callable guard
+        steps = getattr(bound, 'steps', None)
+        if isinstance(steps, (list, tuple)) and steps:
+            for step in steps:
+                result = self._val_to_prompt(step, min_len=15)
+                if result:
+                    return result
+                sub_steps = getattr(step, 'steps', None)
+                if isinstance(sub_steps, (list, tuple)):
+                    for sub_step in sub_steps:
+                        result = self._val_to_prompt(sub_step, min_len=15)
+                        if result:
+                            return result
+
         fn = getattr(bound, 'afunc', None) or getattr(bound, 'func', None) or bound
 
         if not callable(fn):
             return None
 
-        # Unwrap: LangGraph calls update_wrapper on its partial, so __wrapped__ is the real fn
-        fn = getattr(fn, '__wrapped__', fn)
+        # Unwrap __wrapped__ and functools.partial layers recursively
+        fn = _unwrap_fn(fn)
 
-        # Class-based callable (e.g. AgentNode() instance) — check instance attrs, skip dunders
+        # Class-based callable — scan instance attrs first, then class hierarchy
         if not inspect.isfunction(fn) and not inspect.ismethod(fn) and callable(fn):
+            instance_keys: set = set()
+            # 1. Instance __dict__ (self.system_prompt = "...")
             for attr_name, val in vars(fn).items():
                 if attr_name.startswith('__'):
                     continue
+                instance_keys.add(attr_name)
                 result = self._val_to_prompt(val)
                 if result:
                     return result
+            # 2. Class body attrs not shadowed by instance (class Base: system_prompt = "...")
+            for klass in type(fn).__mro__:
+                for attr_name, cls_val in vars(klass).items():
+                    if attr_name.startswith('__') or attr_name in instance_keys:
+                        continue
+                    result = self._val_to_prompt(cls_val)
+                    if result:
+                        return result
 
         # Bound method — check __self__ instance attrs, skip dunders
         self_obj = getattr(fn, '__self__', None)
