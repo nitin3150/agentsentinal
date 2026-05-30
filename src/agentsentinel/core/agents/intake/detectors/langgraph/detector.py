@@ -5,7 +5,7 @@ from agentsentinel.models import AgentProfile
 
 from .utils import SKIP_NODES, _unwrap_fn
 from .prompt import val_to_prompt, extract_system_prompt
-from .tools import extract_tool_definitions, extract_bound_tools
+from .tools import extract_tool_definitions, extract_bound_tools, _find_tools_registry
 
 logger = logging.getLogger(__name__)
 
@@ -148,16 +148,8 @@ class LangGraphDetector:
         for _name, _node in nodes.items():
             if _name in SKIP_NODES:
                 continue
-            _candidate = getattr(_node, 'bound', None) or _node
-            _data = getattr(_node, 'data', None)
-            for _attr in ('tools_by_name', '_tools_by_name'):
-                if isinstance(getattr(_candidate, _attr, None), dict):
-                    tools_node = _node
-                    break
-                if _data is not None and isinstance(getattr(_data, _attr, None), dict):
-                    tools_node = _node
-                    break
-            if tools_node is not None:
+            if _find_tools_registry(_node) is not None:
+                tools_node = _node
                 break
 
         if tools_node is not None:

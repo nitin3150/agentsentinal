@@ -124,8 +124,8 @@ class AgentSentinel:
             tool_definitions = tools,
             source = source,
         )
-        intake_target = agent if agent is not None else source
-        profile = self._intake.extract_profile(intake_target, agent_profile)
+        source_target = agent if agent is not None else source
+        profile = self._intake.extract_profile(source_target, agent_profile)
         with self._lm_context():
             return self._run_async(self._inspector.inspect(profile, policies, compliance))
 

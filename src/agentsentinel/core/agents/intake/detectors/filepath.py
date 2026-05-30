@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 
 
 class FilePathDetector:
-    def __init__(self, agent: Any, framework_detectors: Sequence[Type] = ()) -> None:
-        self.path = agent
+    def __init__(self, source: Any, framework_detectors: Sequence[Type] = ()) -> None:
+        self.path = source
         self._framework_detectors = framework_detectors
 
     def can_handle(self) -> bool:

@@ -28,13 +28,14 @@ if __name__ =="__main__":
 
     profile = sentinel.inspect(
         agent,
+        source = "demo/langchain_agent.py",
         domain="personal agent",
         policies=policies,
     )
 
-    result = sentinel.improve(
-        agent_profile=profile,
-        policies=policies,
-    )
+    # result = sentinel.improve(
+    #     agent_profile=profile,
+    #     policies=policies,
+    # )
 
-    sentinel.stress_test(agent, profile, policies=policies)
+    # sentinel.stress_test(agent, profile, policies=policies)

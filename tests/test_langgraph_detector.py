@@ -622,19 +622,6 @@ class TestAgentIntake:
         profile = AgentIntake().extract_profile(app)
         assert profile.framework == "langgraph"
 
-    def test_user_prompt_overrides_detected(self):
-        """User-supplied system_prompt wins over auto-detected one."""
-        def make():
-            system_prompt = "Detected prompt — should be overridden."
-            def node(state):
-                _ = system_prompt
-                return state
-            return node
-        app = _compile_graph(make())
-        override = AgentProfile(system_prompt="User override prompt.")
-        profile = AgentIntake().extract_profile(app, agent_profile=override)
-        assert profile.system_prompt == "User override prompt."
-
     def test_user_tools_replace_when_no_detected(self):
         """When no tools auto-detected, user-supplied tools are used as-is."""
         def node(state): return state

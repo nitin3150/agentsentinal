@@ -1,7 +1,24 @@
 import inspect
-from typing import Any, Sequence
+from typing import Any, Optional, Sequence
 
 from .utils import SKIP_NODES, _unwrap_fn
+
+
+def _find_tools_registry(obj: Any, depth: int = 4) -> Optional[dict]:
+    """Recursively search for tools_by_name/_tools_by_name through wrapper chains."""
+    if obj is None or depth == 0:
+        return None
+    for attr in ('tools_by_name', '_tools_by_name'):
+        registry = getattr(obj, attr, None)
+        if isinstance(registry, dict) and registry:
+            return registry
+    for wrap_attr in ('bound', 'func', 'afunc', 'data'):
+        inner = getattr(obj, wrap_attr, None)
+        if inner is not None and inner is not obj:
+            result = _find_tools_registry(inner, depth - 1)
+            if result:
+                return result
+    return None
 
 
 def convert_tool(tool: Any) -> dict:
@@ -38,27 +55,26 @@ def tools_from_kwargs_lookup(values) -> list:
     for val in values:
         kwargs = getattr(val, 'kwargs', {}) or {}
         raw_tools = kwargs.get('tools') if isinstance(kwargs, dict) else None
-        if not isinstance(raw_tools, (list, tuple)) or not raw_tools:
-            continue
-        converted = tools_from_raw(raw_tools)
-        if converted:
-            return converted
+        if isinstance(raw_tools, (list, tuple)) and raw_tools:
+            converted = tools_from_raw(raw_tools)
+            if converted:
+                return converted
+        # RunnableSequence (prompt | model.bind_tools(...)) — scan each step
+        steps = getattr(val, 'steps', None)
+        if isinstance(steps, (list, tuple)):
+            converted = tools_from_kwargs_lookup(steps)
+            if converted:
+                return converted
     return []
 
 
 def extract_tool_definitions(tools_node: Any) -> list:
+    registry = _find_tools_registry(tools_node)
+    if registry:
+        return [convert_tool(t) for t in registry.values()]
+
     bound = getattr(tools_node, 'bound', None) or tools_node
-    for attr in ('tools_by_name', '_tools_by_name'):
-        registry = getattr(bound, attr, None)
-        if isinstance(registry, dict) and registry:
-            return [convert_tool(t) for t in registry.values()]
-
     data = getattr(tools_node, 'data', None)
-    for attr in ('tools_by_name', '_tools_by_name'):
-        registry = getattr(data, attr, None)
-        if isinstance(registry, dict) and registry:
-            return [convert_tool(t) for t in registry.values()]
-
     tools_attr = getattr(bound, 'tools', None) or (getattr(data, 'tools', None) if data else None)
     if isinstance(tools_attr, (list, tuple)):
         return [convert_tool(t) for t in tools_attr if hasattr(t, 'name')]
