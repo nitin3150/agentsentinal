@@ -1,12 +1,16 @@
+import asyncio
 import difflib
+import json
 import logging
+import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 
 import agentsentinel
-from agentsentinel.models.policies import ComplianceViolation
+from agentsentinel.models.policies import ComplianceViolation, ComplianceAnalysis, ComplianceStandardResult
 from agentsentinel.models.agent import RiskLevel
 
 logger = logging.getLogger(__name__)
@@ -123,16 +127,171 @@ def _check_rules_static(
     return violations, ambiguous
 
 
-# Placeholder — implemented fully in analyze_compliance below
+COMPLIANCE_TIMEOUT = float(os.getenv("COMPLIANCE_TIMEOUT", "30"))
+
+_LLM_PROMPT = """You are an AI compliance auditor. Rule-based analysis flagged the rules below as potentially violated for the {standard} standard.
+
+AGENT SYSTEM PROMPT:
+\"\"\"
+{system_prompt}
+\"\"\"
+
+TOOL NAMES: {tool_names}
+
+FLAGGED RULES:
+{flagged_rules}
+
+For each rule, decide if it is a REAL violation given the full context of the system prompt.
+A rule flagged for a missing required pattern may still be satisfied if the concept is expressed differently.
+
+Return ONLY this JSON:
+{{
+  "confirmed_violations": [
+    {{
+      "rule_id": "<rule id>",
+      "confirmed": true or false,
+      "description": "<one sentence explanation if confirmed, empty string if not>",
+      "suggestion": "<actionable fix if confirmed, empty string if not>"
+    }}
+  ]
+}}
+No prose, no markdown fences."""
+
+
+async def _llm_call(prompt: str) -> str | None:
+    """Try Groq first, Gemini fallback. Returns raw LLM text or None."""
+    groq_key = os.getenv("GROQ_API_KEY")
+    groq_model = os.getenv("GRO_MODEL", "llama-3.3-70b-versatile").removeprefix("groq/")
+    if groq_key:
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(
+                api_key=groq_key,
+                base_url=os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
+            )
+            resp = await asyncio.wait_for(
+                client.chat.completions.create(
+                    model=groq_model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0,
+                ),
+                timeout=COMPLIANCE_TIMEOUT,
+            )
+            return resp.choices[0].message.content
+        except Exception as exc:
+            logger.warning("Compliance LLM call (Groq) failed: %s", exc)
+
+    gemini_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    if gemini_key:
+        try:
+            from google import genai
+            client = genai.Client(api_key=gemini_key)
+            resp = await asyncio.wait_for(
+                client.aio.models.generate_content(model=gemini_model, contents=prompt),
+                timeout=COMPLIANCE_TIMEOUT,
+            )
+            return resp.text
+        except Exception as exc:
+            logger.warning("Compliance LLM call (Gemini) failed: %s", exc)
+
+    return None
+
+
+def _strip_fences(text: str) -> str:
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    return text.strip()
+
+
+async def _confirm_with_llm(
+    system_prompt: str,
+    tool_definitions: list,
+    ambiguous_rules: list[ComplianceRule],
+    standard: str,
+) -> list[ComplianceViolation]:
+    """LLM pass to confirm or dismiss rule-based ambiguous findings."""
+    if not ambiguous_rules:
+        return []
+
+    tool_names = ", ".join(
+        t.get("name", "") if isinstance(t, dict) else getattr(t, "name", "")
+        for t in tool_definitions
+    ) or "(none)"
+
+    flagged_text = "\n".join(
+        f"- [{r.id}] {r.description} (required patterns: {r.required_patterns})"
+        for r in ambiguous_rules
+    )
+
+    prompt = _LLM_PROMPT.format(
+        standard=standard.upper(),
+        system_prompt=system_prompt[:4000],
+        tool_names=tool_names[:500],
+        flagged_rules=flagged_text,
+    )
+
+    raw = await _llm_call(prompt)
+    if not raw:
+        return []
+
+    try:
+        payload = json.loads(_strip_fences(raw))
+    except json.JSONDecodeError:
+        logger.warning("Compliance LLM returned unparseable JSON for standard '%s'", standard)
+        return []
+
+    rule_map = {r.id: r for r in ambiguous_rules}
+    violations: list[ComplianceViolation] = []
+
+    for item in payload.get("confirmed_violations", []):
+        if not item.get("confirmed"):
+            continue
+        rule_id = item.get("rule_id", "")
+        rule = rule_map.get(rule_id)
+        if rule is None:
+            continue
+        violations.append(ComplianceViolation(
+            rule_id=rule_id,
+            description=item.get("description") or rule.description,
+            severity=RiskLevel(rule.severity),
+            suggestion=item.get("suggestion") or rule.suggestion,
+        ))
+
+    return violations
+
+
 async def analyze_compliance(
     system_prompt: str,
     tool_definitions: list,
     standards: list[str],
-):
-    """Hybrid compliance analysis: rule-based first, LLM confirmation for ambiguous rules.
-    Full implementation added in a later step."""
-    from agentsentinel.models.policies import ComplianceAnalysis
+) -> ComplianceAnalysis:
+    """Hybrid compliance analysis: rule-based first, LLM confirmation for ambiguous rules."""
     resolved = resolve_standards(standards)
     if not resolved:
         return ComplianceAnalysis()
-    return ComplianceAnalysis(standards_checked=resolved)
+
+    results: dict[str, ComplianceStandardResult] = {}
+
+    for standard in resolved:
+        try:
+            rules = load_rules(standard)
+        except ValueError as exc:
+            logger.warning("Skipping standard '%s': %s", standard, exc)
+            continue
+
+        static_violations, ambiguous = _check_rules_static(system_prompt, tool_definitions, rules)
+        llm_violations = await _confirm_with_llm(system_prompt, tool_definitions, ambiguous, standard)
+
+        all_violations = static_violations + llm_violations
+        results[standard] = ComplianceStandardResult(
+            compliant=len(all_violations) == 0,
+            violations=all_violations,
+        )
+
+    return ComplianceAnalysis(
+        standards_checked=list(results.keys()),
+        results=results,
+    )

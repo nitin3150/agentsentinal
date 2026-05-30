@@ -185,3 +185,54 @@ def test_static_check_passes_compliant_prompt():
     )
     assert violations == []
     assert ambiguous == []
+
+
+import asyncio
+from unittest.mock import AsyncMock, patch
+from agentsentinel.core.agents.inspector.analyzers.compliances import _confirm_with_llm, ComplianceRule
+
+
+def test_confirm_with_llm_returns_violations_for_confirmed():
+    rule = ComplianceRule(
+        id="hipaa-002",
+        description="Must mention data minimization",
+        severity="medium",
+        suggestion="Add data minimization principle",
+        required_patterns=["minimum necessary"],
+        forbidden_patterns=[],
+    )
+    mock_response = '{"confirmed_violations": [{"rule_id": "hipaa-002", "confirmed": true, "description": "No data minimization mention", "suggestion": "Add data minimization principle"}]}'
+
+    with patch(
+        "agentsentinel.core.agents.inspector.analyzers.compliances._llm_call",
+        new=AsyncMock(return_value=mock_response),
+    ):
+        result = asyncio.run(_confirm_with_llm("You are a helpful agent.", [], [rule], "hipaa"))
+
+    assert len(result) == 1
+    assert result[0].rule_id == "hipaa-002"
+
+
+def test_confirm_with_llm_dismisses_false_positives():
+    rule = ComplianceRule(
+        id="hipaa-002",
+        description="Must mention data minimization",
+        severity="medium",
+        suggestion="Add data minimization principle",
+        required_patterns=["minimum necessary"],
+        forbidden_patterns=[],
+    )
+    mock_response = '{"confirmed_violations": [{"rule_id": "hipaa-002", "confirmed": false, "description": "", "suggestion": ""}]}'
+
+    with patch(
+        "agentsentinel.core.agents.inspector.analyzers.compliances._llm_call",
+        new=AsyncMock(return_value=mock_response),
+    ):
+        result = asyncio.run(_confirm_with_llm("You are a helpful agent.", [], [rule], "hipaa"))
+
+    assert result == []
+
+
+def test_confirm_with_llm_empty_ambiguous_skips_llm():
+    result = asyncio.run(_confirm_with_llm("anything", [], [], "hipaa"))
+    assert result == []
