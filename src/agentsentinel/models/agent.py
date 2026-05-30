@@ -1,9 +1,14 @@
+from __future__ import annotations
+
 from typing import List
 from typing import Any
 from enum import Enum
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from pathlib import Path
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from agentsentinel.models.policies import ComplianceStandardResult
 
 
 class RiskLevel(str, Enum):
@@ -22,6 +27,7 @@ class RiskCategory(str, Enum):
     MEMORY_RISK = "memory_risk"
     HALLUCINATION_PRONE = "hallucination_prone"
     POLICY_VIOLATION = "policy_violation"
+    COMPLIANCE_VIOLATION = "compliance_violation"
 
 
 class RiskFlag(BaseModel):
@@ -116,3 +122,6 @@ class InspectedAgentProfile(AgentProfile):
 
     # Extraction metadata
     extraction_confidence: float = Field(ge=0.0, le=1.0, default=0.0)
+
+    # Compliance
+    compliance_results: dict[str, "ComplianceStandardResult"] = Field(default_factory=dict)
