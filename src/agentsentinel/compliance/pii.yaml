@@ -1,5 +1,8 @@
 name: PII
 version: "2024"
+# Pattern matching uses OR semantics: any one pattern from the list is sufficient.
+# required_patterns: rule passes if ANY pattern is found in the agent system prompt + tool names.
+# forbidden_patterns: rule fails if ANY pattern is found.
 rules:
   - id: pii-001
     description: "Agent must not collect or store personal data without purpose limitation"

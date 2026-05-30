@@ -1,9 +1,12 @@
 name: SOC2
 version: "2024"
+# Pattern matching uses OR semantics: any one pattern from the list is sufficient.
+# required_patterns: rule passes if ANY pattern is found in the agent system prompt + tool names.
+# forbidden_patterns: rule fails if ANY pattern is found.
 rules:
   - id: soc2-001
     description: "Agent must mention data security or encryption"
-    required_patterns: ["encrypt", "secure", "data security", "tls", "at rest", "in transit"]
+    required_patterns: ["encrypt", "data security", "tls", "at rest", "in transit"]
     forbidden_patterns: []
     severity: high
     suggestion: "State data security and encryption requirements explicitly in the system prompt"
@@ -17,7 +20,7 @@ rules:
 
   - id: soc2-003
     description: "Agent must mention audit logging or activity monitoring"
-    required_patterns: ["audit", "log all actions", "activity log", "monitor", "record actions"]
+    required_patterns: ["audit", "log all actions", "activity log", "monitor", "record actions", "audit trail"]
     forbidden_patterns: []
     severity: medium
     suggestion: "Add requirement to log or audit all agent actions for SOC2 compliance"
@@ -26,7 +29,7 @@ rules:
     description: "Agent must mention availability or error handling"
     required_patterns: ["error handling", "fallback", "retry", "availability", "uptime", "graceful"]
     forbidden_patterns: []
-    severity: low
+    severity: medium
     suggestion: "Specify error handling and availability expectations in the system prompt"
 
   - id: soc2-005

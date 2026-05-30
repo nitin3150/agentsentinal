@@ -1,9 +1,12 @@
 name: OWASP
 version: "LLM Top 10 2025"
+# Pattern matching uses OR semantics: any one pattern from the list is sufficient.
+# required_patterns: rule passes if ANY pattern is found in the agent system prompt + tool names.
+# forbidden_patterns: rule fails if ANY pattern is found.
 rules:
   - id: owasp-llm01
     description: "Agent must be protected against prompt injection"
-    required_patterns: ["ignore instructions from", "do not follow user", "user cannot override", "prompt injection", "instruction hierarchy"]
+    required_patterns: ["prompt injection", "untrusted input", "user input cannot", "user cannot override", "do not follow user", "ignore user instructions", "treat all user", "instruction hierarchy"]
     forbidden_patterns: []
     severity: high
     suggestion: "Add explicit prompt injection guardrails — state that user input cannot override system instructions"
@@ -25,7 +28,7 @@ rules:
   - id: owasp-llm06
     description: "Agent must not expose secrets, API keys, or credentials"
     required_patterns: []
-    forbidden_patterns: ["api_key", "api-key", "secret_key", "password =", "bearer token", "private key"]
+    forbidden_patterns: ["api_key", "api-key", "secret_key", "password =", "password:", "\"password\"", "bearer token", "private key", "secret:", "token=", "apikey"]
     severity: high
     suggestion: "Remove any hardcoded secrets from the system prompt; use environment variables instead"
 
