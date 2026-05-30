@@ -28,6 +28,7 @@ from agentsentinel.core.agents.inspector.analyzers.tools import (
     ToolsAnalysis,
     analyze_tools,
 )
+from agentsentinel.core.agents.inspector.analyzers.compliances import analyze_compliance
 from agentsentinel.models.intake import ExtractionResult
 from agentsentinel.models import AgentProfile
 from agentsentinel.utils.policies import parse_policy_pdf
@@ -47,7 +48,7 @@ class InspectorAgent:
     def __init__(self, semantic_enabled: bool = True):
         self.semantic_enabled = semantic_enabled
 
-    async def inspect(self, profile: AgentProfile, policies: str = "", compliance: list[str] = ['all']) -> InspectedAgentProfile:
+    async def inspect(self, profile: AgentProfile, policies: str = "", compliance: list[str] = []) -> InspectedAgentProfile:
         logger.info("Inspection Starts...")
         extraction = ExtractionResult(
             system_prompt=profile.system_prompt,
@@ -75,8 +76,13 @@ class InspectorAgent:
                 logger.warning("Failed to parse policy PDF '%s': %s", policies, exc)
                 extraction.warnings.append(f"Policy PDF could not be parsed: {exc}")
 
-        # Static analyzers are pure Python (no I/O, no GIL release) — run them
-        # directly rather than via to_thread to avoid pointless thread overhead.
+        if len(compliance) >= 1:
+            try:
+                compliance_res = await analyze_compliance(extraction.system_prompt, extraction.tool_definitions, compliance)
+                logger.info(f"Compliance result: {compliance_res}")
+            except Exception as e:
+                logger.warning("Failed to Read the Compliance: %s", e)
+                extraction.warnings.append(f"Compliances could not be parsed: {e}")
         try:
             logger.info("Analysing Prompt...")
             prompt_res = analyze_prompt(extraction.system_prompt)
