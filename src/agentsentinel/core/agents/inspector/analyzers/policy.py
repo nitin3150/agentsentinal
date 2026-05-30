@@ -5,9 +5,8 @@ import os
 import re
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
-
 from agentsentinel.models import RiskCategory, RiskFlag, RiskLevel
+from agentsentinel.models.policies import PolicyAnalysis, PolicyViolation
 
 logger = logging.getLogger(__name__)
 
@@ -45,19 +44,6 @@ Return a single JSON object with EXACTLY these keys and no others:
 
 If the agent is fully compliant, return an empty violations array and compliance_score of 100.
 Output ONLY the JSON. No prose, no markdown fences, no trailing commas."""
-
-
-class PolicyViolation(BaseModel):
-    description: str
-    policy_reference: str
-    severity: RiskLevel = RiskLevel.MEDIUM
-    suggestion: str
-
-
-class PolicyAnalysis(BaseModel):
-    compliance_score: int = Field(ge=0, le=100, default=100)
-    violations: list[PolicyViolation] = Field(default_factory=list)
-    risk_flags: list[RiskFlag] = Field(default_factory=list)
 
 
 def _strip_fences(text: str) -> str:

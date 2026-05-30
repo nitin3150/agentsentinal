@@ -31,6 +31,7 @@ if __name__ =="__main__":
         source = "demo/langchain_agent.py",
         domain="personal agent",
         policies=policies,
+        compliance=['PII', 'hipaa', 'soc2']
     )
 
     # result = sentinel.improve(

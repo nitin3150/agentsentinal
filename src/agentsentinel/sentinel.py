@@ -114,7 +114,7 @@ class AgentSentinel:
             system_prompt: str = "",
             tools: list[dict] = [],
             policies: str = "",
-            compliance: list[str] = ["all"]
+            compliance: list[str] = []
         ) -> InspectedAgentProfile:
         if agent is None and source is None:
             raise ValueError("inspect() requires at least one of: agent (live graph object) or source (file path)")
