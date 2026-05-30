@@ -108,8 +108,8 @@ builder.add_edge("n", END)
 graph = builder.compile()
         """)
         profile = FilePathDetector(str(p))()
-        assert profile.source_code is not None
-        assert "StateGraph" in profile.source_code
+        assert profile.source is not None
+        assert "StateGraph" in profile.source
 
 
 class TestStaticFallback:
@@ -154,7 +154,7 @@ class TestStaticFallback:
         source = "system_prompt = 'hello'\n"
         detector = FilePathDetector.__new__(FilePathDetector)
         result = detector._static_extract(source)
-        assert result.source_code == source
+        assert result.source == source
 
     def test_syntax_error_returns_warning(self):
         result = self._static("def broken(")
@@ -210,7 +210,7 @@ graph = builder.compile()
         profile = AgentIntake().extract_profile(str(p))
         assert profile.framework == "langgraph"
         assert "end-to-end file-path assistant" in profile.system_prompt
-        assert profile.source_code is not None
+        assert profile.source is not None
 
     def test_path_object_also_works(self, tmp_path):
         p = write_agent(tmp_path, """

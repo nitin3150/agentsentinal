@@ -2,6 +2,7 @@ import asyncio
 import concurrent.futures
 import contextvars
 from contextlib import contextmanager
+from pathlib import Path
 from typing import TypedDict, Any, Optional
 from langgraph.graph import StateGraph, START, END
 from agentsentinel.core.agents.inspector import InspectorAgent
@@ -105,14 +106,28 @@ class AgentSentinel:
             "inspected_profile":None,
         }
 
-    def inspect(self, agent, domain: str = "", system_prompt: str = "", policies:str="") -> InspectedAgentProfile:
+    def inspect(
+            self,
+            agent: Any = None,
+            source: str | Path | None = None,
+            domain: str = "",
+            system_prompt: str = "",
+            tools: list[dict] = [],
+            policies: str = "",
+            compliance: list[str] = ["all"]
+        ) -> InspectedAgentProfile:
+        if agent is None and source is None:
+            raise ValueError("inspect() requires at least one of: agent (live graph object) or source (file path)")
         agent_profile = AgentProfile(
-            domain=domain,
-            system_prompt=system_prompt,
+            domain = domain,
+            system_prompt = system_prompt,
+            tool_definitions = tools,
+            source = source,
         )
-        profile = self._intake.extract_profile(agent, agent_profile)
+        intake_target = agent if agent is not None else source
+        profile = self._intake.extract_profile(intake_target, agent_profile)
         with self._lm_context():
-            return self._run_async(self._inspector.inspect(profile, policies))
+            return self._run_async(self._inspector.inspect(profile, policies, compliance))
 
     def improve(self, agent_profile: InspectedAgentProfile, policies: str = ""):
         policy_text = policies

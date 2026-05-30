@@ -7,16 +7,22 @@ import logging
 logger = logging.getLogger(__name__)
 
 class AgentIntake:
+    _FRAMEWORK_DETECTORS = [LangGraphDetector]
+
     def __init__(self):
         self._detectors = [
             FilePathDetector,
-            LangGraphDetector,
+            *self._FRAMEWORK_DETECTORS,
         ]
 
     def extract_profile(self, agent, agent_profile: Optional[AgentProfile] = None) -> AgentProfile:
         logger.info("Starting Agent Profiling....")
         for DetectorClass in self._detectors:
-            detector = DetectorClass(agent)
+            detector = (
+                DetectorClass(agent, self._FRAMEWORK_DETECTORS)
+                if DetectorClass is FilePathDetector
+                else DetectorClass(agent)
+            )
             if detector.can_handle():
                 result = detector()
                 result.system_prompt = result.system_prompt.strip("\n")

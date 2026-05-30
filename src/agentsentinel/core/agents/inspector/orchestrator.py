@@ -47,7 +47,7 @@ class InspectorAgent:
     def __init__(self, semantic_enabled: bool = True):
         self.semantic_enabled = semantic_enabled
 
-    async def inspect(self, profile: AgentProfile, policies: str = "") -> InspectedAgentProfile:
+    async def inspect(self, profile: AgentProfile, policies: str = "", compliance: list[str] = ['all']) -> InspectedAgentProfile:
         logger.info("Inspection Starts...")
         extraction = ExtractionResult(
             system_prompt=profile.system_prompt,

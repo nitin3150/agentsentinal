@@ -2,7 +2,7 @@ from typing import List
 from typing import Any
 from enum import Enum
 from typing import Optional
-
+from pathlib import Path
 from pydantic import BaseModel, Field
 
 
@@ -49,7 +49,7 @@ class AgentProfile(BaseModel):
     framework: Any = "unknown"
     warnings: list[str] = Field(default_factory=list)
     source_object: Optional[Any] = None
-    source_code: Optional[str] = None
+    source: Optional[str | Path] = None
 
     model_config = {"arbitrary_types_allowed": True}
 
