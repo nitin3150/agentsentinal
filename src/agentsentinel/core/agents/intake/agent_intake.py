@@ -20,9 +20,9 @@ class AgentIntake:
                 result.system_prompt = result.system_prompt.strip("\n")
                 if agent_profile and agent_profile.system_prompt:
                     if result.system_prompt and result.system_prompt != agent_profile.system_prompt:
-                        logger.error(
+                        logger.warning(
                             "System prompt mismatch: detected prompt differs from user-provided prompt.\n"
-                            "Detected : %s\nProvided : %s",
+                            "Detected : %s\nProvided : %s (user-provided wins)",
                             result.system_prompt,
                             agent_profile.system_prompt,
                         )
@@ -30,7 +30,10 @@ class AgentIntake:
                     result.domain = agent_profile.domain
 
                 if agent_profile and agent_profile.tool_definitions:
-                    result.tool_definitions = agent_profile.tool_definitions
+                    user_by_name = {t.get('name'): t for t in agent_profile.tool_definitions}
+                    detected_by_name = {t.get('name'): t for t in result.tool_definitions}
+                    merged = {**detected_by_name, **user_by_name}
+                    result.tool_definitions = list(merged.values())
                 
                 logger.info("Profile: %s", result.to_log_str())
                 return result

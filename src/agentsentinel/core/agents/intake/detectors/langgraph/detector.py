@@ -38,23 +38,32 @@ class LangGraphDetector:
     # ── Context schema helpers ────────────────────────────────────────────────
 
     def _extract_from_context_schema(self) -> Optional[str]:
-        context_schema = getattr(self.agent, 'context_schema', None)
-        if context_schema is None:
-            return None
-        if hasattr(context_schema, '__dataclass_fields__'):
-            fields_dict = getattr(context_schema, '__dataclass_fields__', {})
-            field = fields_dict.get('system_prompt')
-            if field:
-                default = field.default
-                if default and isinstance(default, str) and len(default) > 15:
-                    return default
-                if field.default_factory != type(field.default_factory):
-                    try:
-                        val = field.default_factory()
-                        if isinstance(val, str) and len(val) > 15:
-                            return val
-                    except Exception:
-                        pass
+        for attr in ('context_schema', 'input_schema'):
+            schema = getattr(self.agent, attr, None)
+            if schema is None:
+                continue
+            # Dataclass fields
+            if hasattr(schema, '__dataclass_fields__'):
+                field = schema.__dataclass_fields__.get('system_prompt')
+                if field:
+                    default = field.default
+                    if default and isinstance(default, str) and len(default) > 15:
+                        return default
+                    if field.default_factory != type(field.default_factory):
+                        try:
+                            val = field.default_factory()
+                            if isinstance(val, str) and len(val) > 15:
+                                return val
+                        except Exception:
+                            pass
+            # Pydantic v2 model_fields
+            model_fields = getattr(schema, 'model_fields', None)
+            if isinstance(model_fields, dict):
+                field_info = model_fields.get('system_prompt')
+                if field_info is not None:
+                    default = getattr(field_info, 'default', None)
+                    if default is not None and isinstance(default, str) and len(default) > 15:
+                        return default
         return None
 
     def _extract_from_context_instance(self) -> Optional[str]:

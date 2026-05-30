@@ -254,7 +254,7 @@ class TestPromptValueTypes:
         g = StateGraph(Config)
         g.add_node("node", lambda state: state)
         g.set_entry_point("node")
-        g.add_edge("node", "END")
+        g.add_edge("node", END)
         app = g.compile()
         
         result = LangGraphDetector(app)()
@@ -635,19 +635,10 @@ class TestAgentIntake:
         profile = AgentIntake().extract_profile(app, agent_profile=override)
         assert profile.system_prompt == "User override prompt."
 
-    def test_user_tools_override_detected(self):
-        """User-supplied tool_definitions wins over auto-detected ones."""
-        from langchain_core.tools import tool
-        from langgraph.prebuilt import ToolNode
-
-        @tool
-        def detected_tool(x: int) -> int:
-            """Auto-detected tool."""
-            return x
-
+    def test_user_tools_replace_when_no_detected(self):
+        """When no tools auto-detected, user-supplied tools are used as-is."""
         def node(state): return state
-        app = _compile_graph(node, tools_node=ToolNode([detected_tool]))
-
+        app = _compile_graph(node)
         override = AgentProfile(tool_definitions=[{"name": "user_tool", "description": "override"}])
         profile = AgentIntake().extract_profile(app, agent_profile=override)
         assert len(profile.tool_definitions) == 1
@@ -665,6 +656,37 @@ class TestAgentIntake:
         override = AgentProfile(system_prompt="Fallback prompt.")
         profile = AgentIntake().extract_profile(RandomObject(), agent_profile=override)
         assert profile.system_prompt == "Fallback prompt."
+
+    def test_user_tools_merge_with_detected(self):
+        """User-provided tools merge with detected — user wins on name collision."""
+        from langchain_core.tools import tool
+        from langgraph.prebuilt import ToolNode
+
+        @tool
+        def detected_tool(x: int) -> int:
+            """Auto-detected tool."""
+            return x
+
+        def node(state): return state
+        app = _compile_graph(node, tools_node=ToolNode([detected_tool]))
+
+        override = AgentProfile(tool_definitions=[
+            {"name": "user_only_tool", "description": "only from user"},
+            {"name": "detected_tool", "description": "user override description"},
+        ])
+        profile = AgentIntake().extract_profile(app, agent_profile=override)
+        names = {t["name"] for t in profile.tool_definitions}
+        assert "detected_tool" in names
+        assert "user_only_tool" in names
+        detected = next(t for t in profile.tool_definitions if t["name"] == "detected_tool")
+        assert detected["description"] == "user override description"
+
+    def test_source_object_populated(self):
+        """source_object on AgentProfile must reference the live agent."""
+        def node(state): return state
+        app = _compile_graph(node)
+        profile = AgentIntake().extract_profile(app)
+        assert profile.source_object is app
 
     def test_prompt_stripped_of_leading_trailing_newlines(self):
         """AgentIntake strips leading/trailing newlines but preserves periods."""

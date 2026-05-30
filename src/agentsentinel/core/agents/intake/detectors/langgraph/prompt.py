@@ -120,6 +120,13 @@ def extract_system_prompt(model_node: Any) -> Optional[str]:
         result = val_to_prompt(val, min_len=15)
         if result:
             return result
+        # RunnableSequence stored as closure var (e.g. lambda wrapping a chain)
+        steps = getattr(val, 'steps', None)
+        if isinstance(steps, (list, tuple)) and steps:
+            for step in steps:
+                result = val_to_prompt(step, min_len=15)
+                if result:
+                    return result
 
     # Function default arguments — def node(state, system_prompt="...")
     if hasattr(fn, '__code__') and hasattr(fn, '__defaults__'):
