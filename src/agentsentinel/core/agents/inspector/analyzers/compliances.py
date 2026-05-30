@@ -6,6 +6,8 @@ from pathlib import Path
 import yaml
 
 import agentsentinel
+from agentsentinel.models.policies import ComplianceViolation
+from agentsentinel.models.agent import RiskLevel
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +77,50 @@ def load_rules(standard: str) -> list[ComplianceRule]:
         )
         for raw in data.get("rules", [])
     ]
+
+
+def _check_rules_static(
+    system_prompt: str,
+    tool_definitions: list,
+    rules: list[ComplianceRule],
+) -> tuple[list[ComplianceViolation], list[ComplianceRule]]:
+    """Rule-based pattern check (OR semantics for both lists).
+
+    Returns:
+        violations: rules with a forbidden pattern match
+        ambiguous: rules whose required patterns were all absent (LLM will confirm)
+    """
+    text = system_prompt.lower()
+    tool_names = " ".join(
+        t.get("name", "") if isinstance(t, dict) else getattr(t, "name", "")
+        for t in tool_definitions
+    ).lower()
+    combined = f"{text} {tool_names}"
+
+    violations: list[ComplianceViolation] = []
+    ambiguous: list[ComplianceRule] = []
+
+    for rule in rules:
+        # If required_patterns are specified and at least one is found, the rule passes.
+        if rule.required_patterns and any(p in combined for p in rule.required_patterns):
+            continue
+
+        # Required patterns absent (or none specified) — check forbidden patterns.
+        for pattern in rule.forbidden_patterns:
+            if pattern in combined:
+                violations.append(ComplianceViolation(
+                    rule_id=rule.id,
+                    description=rule.description,
+                    severity=RiskLevel(rule.severity),
+                    suggestion=rule.suggestion,
+                ))
+                break
+
+        # If required_patterns were specified but none found, flag as ambiguous for LLM.
+        if rule.required_patterns and not any(p in combined for p in rule.required_patterns):
+            ambiguous.append(rule)
+
+    return violations, ambiguous
 
 
 # Placeholder — implemented fully in analyze_compliance below

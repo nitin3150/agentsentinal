@@ -123,3 +123,65 @@ def test_load_rules_rule_has_required_fields():
     assert r.severity in ("low", "medium", "high")
     assert isinstance(r.required_patterns, list)
     assert isinstance(r.forbidden_patterns, list)
+
+
+from agentsentinel.core.agents.inspector.analyzers.compliances import _check_rules_static
+
+
+def test_static_check_finds_forbidden_pattern():
+    from agentsentinel.core.agents.inspector.analyzers.compliances import ComplianceRule
+    rule = ComplianceRule(
+        id="test-001",
+        description="Must not store patient data",
+        severity="high",
+        suggestion="Fix it",
+        required_patterns=[],
+        forbidden_patterns=["store patient data"],
+    )
+    violations, ambiguous = _check_rules_static(
+        "You are a helpful agent. You store patient data for analysis.",
+        [],
+        [rule],
+    )
+    assert len(violations) == 1
+    assert violations[0].rule_id == "test-001"
+    assert len(ambiguous) == 0
+
+
+def test_static_check_finds_missing_required_pattern():
+    from agentsentinel.core.agents.inspector.analyzers.compliances import ComplianceRule
+    rule = ComplianceRule(
+        id="test-002",
+        description="Must mention encryption",
+        severity="medium",
+        suggestion="Add encryption",
+        required_patterns=["encrypt"],
+        forbidden_patterns=[],
+    )
+    violations, ambiguous = _check_rules_static(
+        "You are a helpful assistant.",
+        [],
+        [rule],
+    )
+    assert len(violations) == 0
+    assert len(ambiguous) == 1
+    assert ambiguous[0].id == "test-002"
+
+
+def test_static_check_passes_compliant_prompt():
+    from agentsentinel.core.agents.inspector.analyzers.compliances import ComplianceRule
+    rule = ComplianceRule(
+        id="test-003",
+        description="Must mention encryption",
+        severity="medium",
+        suggestion="Add encryption",
+        required_patterns=["encrypt"],
+        forbidden_patterns=["store patient data"],
+    )
+    violations, ambiguous = _check_rules_static(
+        "You must encrypt all data. Never store patient data.",
+        [],
+        [rule],
+    )
+    assert violations == []
+    assert ambiguous == []
