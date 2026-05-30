@@ -3,6 +3,7 @@ Tests for LangGraphDetector and AgentIntake.
 No LLM API calls — all tests run without network access.
 """
 import pytest
+from typing import Any, cast
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, END
 
@@ -245,12 +246,17 @@ class TestPromptValueTypes:
     def test_pydantic_state_model_default(self):
         """System prompt as Pydantic v2 model field default (not dataclass)."""
         from pydantic import BaseModel as PydanticBase
+        from langgraph.graph import StateGraph
 
         class Config(PydanticBase):
             system_prompt: str = "You are a Pydantic-state assistant."
 
-        app = _compile_graph(lambda state: state)
-        app.context_schema = Config
+        g = StateGraph(Config)
+        g.add_node("node", lambda state: state)
+        g.set_entry_point("node")
+        g.add_edge("node", "END")
+        app = g.compile()
+        
         result = LangGraphDetector(app)()
         assert result.system_prompt == "You are a Pydantic-state assistant."
 
@@ -295,7 +301,7 @@ class TestExtractionPaths:
         ]) | RunnableLambda(lambda x: x)
 
         g = StateGraph(State)
-        g.add_node("agent", chain)
+        g.add_node("agent", lambda state: chain.invoke(cast(dict, state)))
         g.set_entry_point("agent")
         g.add_edge("agent", END)
         app = g.compile()
