@@ -37,6 +37,7 @@ class AgentIntake:
                                 result.system_prompt,
                                 agent_profile.system_prompt,
                             )
+                        result.system_prompt = agent_profile.system_prompt
 
                 if agent_profile and agent_profile.tool_definitions:
                     user_by_name = {t.get('name'): t for t in agent_profile.tool_definitions}
