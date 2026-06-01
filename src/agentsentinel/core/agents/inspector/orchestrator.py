@@ -112,23 +112,24 @@ class InspectorAgent:
                 "constraint_count": prompt_res.constraint_count,
             }
 
-        coros: dict[str, Any] = {
-            "semantic": self._run_semantic(extraction, static_findings),
-        }
+        coros: dict[str, Any] = {}
+        logger.info("Analysing Semantics...")
+        coros["semantic"] = self._run_semantic(extraction, static_findings)
         if policy_text:
+            logger.info("Analysing Policy...")
             coros["policy"] = analyze_policy(
                 system_prompt=extraction.system_prompt,
                 tool_definitions=extraction.tool_definitions,
                 policy_text=policy_text,
             )
         if compliance:
+            logger.info("Analysing Compliance: %s", compliance)
             coros["compliance"] = analyze_compliance(
                 extraction.system_prompt,
                 extraction.tool_definitions,
                 compliance,
             )
 
-        logger.info("Running concurrent analyses: %s", list(coros.keys()))
         raw_results = await asyncio.gather(*coros.values(), return_exceptions=True)
         result_map = dict(zip(coros.keys(), raw_results))
 
@@ -148,8 +149,6 @@ class InspectorAgent:
             logger.warning("Compliance analysis failed: %s", compliance_result)
             extraction.warnings.append(f"Compliance analysis failed: {compliance_result}")
             compliance_result = None
-        elif compliance_result is not None:
-            logger.info("Compliance result: %s", compliance_result)
 
         prompt = _unwrap(prompt_res, PromptAnalysis, extraction, "prompt")
         tools = _unwrap(tools_res, ToolsAnalysis, extraction, "tools")

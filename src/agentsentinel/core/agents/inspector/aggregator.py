@@ -14,6 +14,18 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def _fmt_compliance(compliance_results: dict) -> str:
+    if not compliance_results:
+        return "    (none)"
+    lines = []
+    for standard, result in compliance_results.items():
+        status = "PASS" if result.compliant else "FAIL"
+        lines.append(f"    [{status}] {standard.upper()}")
+        for v in result.violations:
+            lines.append(f"      • [{v.severity.upper()}] {v.rule_id} — {v.description}")
+    return "\n".join(lines)
+
+
 def _fmt_results(k: dict) -> str:
     risk_flags: list[RiskFlag] = k.get("risk_flags") or []
     flag_lines = "\n".join(
@@ -27,6 +39,8 @@ def _fmt_results(k: dict) -> str:
         f"    • {t.name} (quality: {t.quality_score}/10)"
         for t in tool_profiles
     ) or "    (none)"
+    compliance_results = k.get("compliance_results") or {}
+    compliance_lines = _fmt_compliance(compliance_results)
     return (
         f"\n  agent_id            : {k.get('agent_id', '?')}"
         f"\n  framework           : {k.get('framework', '?')}"
@@ -51,6 +65,7 @@ def _fmt_results(k: dict) -> str:
         f"\n  --- Policy ---"
         f"\n  policy_compliance   : {k.get('policy_compliance_score', 100)}/100"
         f"\n  policy_violations   : {k.get('policy_violations') or '(none)'}"
+        f"\n  --- Compliance ({len(compliance_results)} standards) ---\n{compliance_lines}"
         f"\n  --- Risk Flags ({len(risk_flags)}) ---\n{flag_lines}"
         f"\n  warnings            : {warnings or '(none)'}"
     )
