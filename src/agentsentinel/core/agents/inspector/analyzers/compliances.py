@@ -273,6 +273,28 @@ async def _confirm_with_llm(
     return violations
 
 
+async def _analyze_single_standard(
+    standard: str,
+    system_prompt: str,
+    tool_definitions: list,
+) -> tuple[str, ComplianceStandardResult | None]:
+    """Analyze one standard. Returns (standard, result) or (standard, None) on load error."""
+    try:
+        rules = load_rules(standard)
+    except ValueError as exc:
+        logger.warning("Skipping standard '%s': %s", standard, exc)
+        return standard, None
+
+    static_violations, ambiguous = _check_rules_static(system_prompt, tool_definitions, rules)
+    llm_violations = await _confirm_with_llm(system_prompt, tool_definitions, ambiguous, standard)
+
+    all_violations = static_violations + llm_violations
+    return standard, ComplianceStandardResult(
+        compliant=len(all_violations) == 0,
+        violations=all_violations,
+    )
+
+
 async def analyze_compliance(
     system_prompt: str,
     tool_definitions: list,
@@ -283,23 +305,15 @@ async def analyze_compliance(
     if not resolved:
         return ComplianceAnalysis()
 
-    results: dict[str, ComplianceStandardResult] = {}
+    pairs = await asyncio.gather(
+        *[_analyze_single_standard(s, system_prompt, tool_definitions) for s in resolved]
+    )
 
-    for standard in resolved:
-        try:
-            rules = load_rules(standard)
-        except ValueError as exc:
-            logger.warning("Skipping standard '%s': %s", standard, exc)
-            continue
-
-        static_violations, ambiguous = _check_rules_static(system_prompt, tool_definitions, rules)
-        llm_violations = await _confirm_with_llm(system_prompt, tool_definitions, ambiguous, standard)
-
-        all_violations = static_violations + llm_violations
-        results[standard] = ComplianceStandardResult(
-            compliant=len(all_violations) == 0,
-            violations=all_violations,
-        )
+    results: dict[str, ComplianceStandardResult] = {
+        standard: result
+        for standard, result in pairs
+        if result is not None
+    }
 
     return ComplianceAnalysis(
         standards_checked=list(results.keys()),
