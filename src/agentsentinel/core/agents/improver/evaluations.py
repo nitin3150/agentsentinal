@@ -1,6 +1,6 @@
 from agentsentinel.core.agents.improver.policy_guard import PolicyGuard
 import asyncio
-from agentsentinel.models.agent import InspectedAgentProfile
+from agentsentinel.models.agent import AgentProfile, InspectedAgentProfile
 import dspy
 from typing import Any
 from agentsentinel.models.prompt import ImprovementResult
@@ -34,10 +34,11 @@ class ImprovementMetric:
         try:
             improved_profile: InspectedAgentProfile = asyncio.run(
                 self.inspector.inspect(
-                    agent_id         = example.agent_profile.agent_id,
-                    system_prompt    = prediction.improved_prompt,
-                    tool_definitions = prediction.improved_tool_definitions,
-                    framework_hint   = example.agent_profile.framework,
+                    AgentProfile(
+                        system_prompt=prediction.improved_prompt,
+                        tool_definitions=prediction.improved_tool_definitions,
+                        framework=example.agent_profile.framework,
+                    )
                 )
             )
         except Exception as exc:
