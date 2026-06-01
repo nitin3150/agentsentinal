@@ -56,6 +56,7 @@ class AgentProfile(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     source_object: Optional[Any] = None
     source: Optional[str | Path] = None
+    source_code: Optional[str] = None
 
     model_config = {"arbitrary_types_allowed": True}
 

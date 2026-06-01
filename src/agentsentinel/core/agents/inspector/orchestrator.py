@@ -55,6 +55,7 @@ class InspectorAgent:
             tool_definitions=profile.tool_definitions,
             framework=str(profile.framework) if profile.framework else "unknown",
             source_object=profile.source_object,
+            source_code=profile.source_code,
             warnings=list(profile.warnings),
         )
         extraction.confidence = extraction.compute_confidence()
@@ -76,21 +77,6 @@ class InspectorAgent:
                 logger.warning("Failed to parse policy PDF '%s': %s", policies, exc)
                 extraction.warnings.append(f"Policy PDF could not be parsed: {exc}")
 
-        compliance_res = None
-        if compliance:
-            try:
-                compliance_res = await analyze_compliance(
-                    extraction.system_prompt,
-                    extraction.tool_definitions,
-                    compliance,
-                )
-                logger.info("Compliance result: %s", compliance_res)
-            except ValueError as exc:
-                logger.error("Compliance standard error: %s", exc)
-                raise
-            except Exception as exc:
-                logger.warning("Compliance analysis failed: %s", exc)
-                extraction.warnings.append(f"Compliance analysis failed: {exc}")
         try:
             logger.info("Analysing Prompt...")
             prompt_res = analyze_prompt(extraction.system_prompt)
@@ -126,23 +112,44 @@ class InspectorAgent:
                 "constraint_count": prompt_res.constraint_count,
             }
 
-        try:
-            logger.info("Analysing Semantics...")
-            semantic_res: Any = await self._run_semantic(extraction, static_findings)
-        except Exception as exc:
-            logger.error("Error Analysing Semantics!!")
-            semantic_res = exc
-
-        try:
-            logger.info("Analysing Policy...")
-            policy_res: Any = await analyze_policy(
+        coros: dict[str, Any] = {
+            "semantic": self._run_semantic(extraction, static_findings),
+        }
+        if policy_text:
+            coros["policy"] = analyze_policy(
                 system_prompt=extraction.system_prompt,
                 tool_definitions=extraction.tool_definitions,
                 policy_text=policy_text,
             )
-        except Exception as exc:
+        if compliance:
+            coros["compliance"] = analyze_compliance(
+                extraction.system_prompt,
+                extraction.tool_definitions,
+                compliance,
+            )
+
+        logger.info("Running concurrent analyses: %s", list(coros.keys()))
+        raw_results = await asyncio.gather(*coros.values(), return_exceptions=True)
+        result_map = dict(zip(coros.keys(), raw_results))
+
+        semantic_res: Any = result_map["semantic"]
+        if isinstance(semantic_res, BaseException):
+            logger.error("Error Analysing Semantics!!")
+
+        policy_res: Any = result_map.get("policy")
+        if isinstance(policy_res, BaseException):
             logger.error("Error Analysing Policy!!")
-            policy_res = exc
+
+        compliance_result = result_map.get("compliance")
+        if isinstance(compliance_result, ValueError):
+            logger.error("Compliance standard error: %s", compliance_result)
+            raise compliance_result
+        if isinstance(compliance_result, BaseException):
+            logger.warning("Compliance analysis failed: %s", compliance_result)
+            extraction.warnings.append(f"Compliance analysis failed: {compliance_result}")
+            compliance_result = None
+        elif compliance_result is not None:
+            logger.info("Compliance result: %s", compliance_result)
 
         prompt = _unwrap(prompt_res, PromptAnalysis, extraction, "prompt")
         tools = _unwrap(tools_res, ToolsAnalysis, extraction, "tools")
@@ -160,7 +167,7 @@ class InspectorAgent:
             framework=framework,
             semantic=semantic,
             policy=policy,
-            compliance=compliance_res,
+            compliance=compliance_result,
         )
 
     async def _run_semantic(
