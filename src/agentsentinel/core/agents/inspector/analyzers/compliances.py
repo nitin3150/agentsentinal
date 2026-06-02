@@ -6,6 +6,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -160,41 +161,46 @@ No prose, no markdown fences."""
 
 
 async def _llm_call(prompt: str) -> str | None:
-    """Try Groq first, Gemini fallback. Returns raw LLM text or None."""
+    """Try Groq first, Gemini fallback via litellm. Returns raw LLM text or None."""
+    import litellm
+
     groq_key = os.getenv("GROQ_API_KEY")
-    groq_model = os.getenv("GRO_MODEL", "llama-3.3-70b-versatile").removeprefix("groq/")
+    groq_model = os.getenv("GROQ_MODEL", "groq/llama-3.3-70b-versatile")
+    if not groq_model.startswith("groq/"):
+        groq_model = f"groq/{groq_model}"
     if groq_key:
         try:
-            from openai import AsyncOpenAI
-            client = AsyncOpenAI(
-                api_key=groq_key,
-                base_url=os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
-            )
-            resp = await asyncio.wait_for(
-                client.chat.completions.create(
+            resp: Any = await asyncio.wait_for(
+                litellm.acompletion(
                     model=groq_model,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0,
+                    api_key=groq_key,
                 ),
                 timeout=COMPLIANCE_TIMEOUT,
             )
             return resp.choices[0].message.content
         except Exception as exc:
-            logger.warning("Compliance LLM call (Groq) failed: %s", exc)
+            logger.warning("Compliance LLM call (Groq) failed: %s", type(exc).__name__)
 
     gemini_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini/gemini-2.0-flash")
+    if not gemini_model.startswith("gemini/"):
+        gemini_model = f"gemini/{gemini_model}"
     if gemini_key:
         try:
-            from google import genai
-            client = genai.Client(api_key=gemini_key)
-            resp = await asyncio.wait_for(
-                client.aio.models.generate_content(model=gemini_model, contents=prompt),
+            resp: Any = await asyncio.wait_for(
+                litellm.acompletion(
+                    model=gemini_model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0,
+                    api_key=gemini_key,
+                ),
                 timeout=COMPLIANCE_TIMEOUT,
             )
-            return resp.text
+            return resp.choices[0].message.content
         except Exception as exc:
-            logger.warning("Compliance LLM call (Gemini) failed: %s", exc)
+            logger.warning("Compliance LLM call (Gemini) failed: %s", type(exc).__name__)
 
     return None
 
