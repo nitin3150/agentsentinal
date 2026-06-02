@@ -151,7 +151,8 @@ class AgentSentinel:
         if profile is None:
             profile = self.inspect(agent, policies=policies)
         test_agent = TestAgent()
-        return test_agent.test(agent, profile, policies=policies)
+        with self._lm_context():
+            return test_agent.test(agent, profile, policies=policies)
 
     def audit(
         self,

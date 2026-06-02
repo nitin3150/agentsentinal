@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 import warnings
 
 import dspy
@@ -19,11 +18,12 @@ class TestAgent():
     def __init__(self):
         pass
 
-    def test(self, agent, agent_profile: Optional[InspectedAgentProfile], policies: str = ""):
-        dspy.configure(lm=dspy.LM(
-            os.getenv("GROQ_MODEL") or "",
-            api_key=os.getenv("GROQ_API_KEY"),
-        ))
+    def test(self, agent, agent_profile: InspectedAgentProfile, policies: str = ""):
+        if dspy.settings.lm is None:
+            raise RuntimeError(
+                "No LLM configured. Pass providers=[{'model': '...', 'api_key': '...'}] "
+                "to AgentSentinel() or set LLM_API_KEY + LLM_MODEL env vars."
+            )
 
         logger.info("Step 1/3: Generating adversarial prompts")
         generator = AdversarialPromptGenerator()
