@@ -9,7 +9,6 @@ from agentsentinel.core.agents.tester.adversarial_prompts_generator import Adver
 from agentsentinel.core.agents.tester.runner import AgentRunner
 from agentsentinel.core.agents.tester.evaluator import ResponseEvaluator
 from agentsentinel.core.agents.tester.report import generate_report
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 

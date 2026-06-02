@@ -1,6 +1,6 @@
 import json
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def generate_report(evaluated_results: list, output_path: str = "audit_report") -> dict:
@@ -20,7 +20,7 @@ def generate_report(evaluated_results: list, output_path: str = "audit_report") 
     pass_rate = round(total_pass / total * 100, 1) if total else 0
 
     report = {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "summary": {
             "total": total,
             "passed": total_pass,
