@@ -188,6 +188,7 @@ class AgentSentinel:
 
         test_agent = TestAgent()
         report: dict = {}
+        iteration = 0
 
         for iteration in range(1, max_iterations + 1):
             logger.info("Audit iteration %d/%d — stress testing...", iteration, max_iterations)
