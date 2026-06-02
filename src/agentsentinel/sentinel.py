@@ -147,12 +147,12 @@ class AgentSentinel:
                 policies=policy_text,
             )
     
-    def stress_test(self, agent, profile: Optional[InspectedAgentProfile] = None, policies: str = ""):
+    def stress_test(self, agent, profile: Optional[InspectedAgentProfile] = None, policies: str = "", output_dir: str | Path | None = None):
         if profile is None:
             profile = self.inspect(agent, policies=policies)
         test_agent = TestAgent()
         with self._lm_context():
-            return test_agent.test(agent, profile, policies=policies)
+            return test_agent.test(agent, profile, policies=policies, output_dir=output_dir)
 
     def audit(
         self,

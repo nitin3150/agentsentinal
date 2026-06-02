@@ -1,6 +1,7 @@
 import json
 import logging
 import warnings
+from pathlib import Path
 
 import dspy
 
@@ -17,12 +18,22 @@ class TestAgent():
     def __init__(self):
         pass
 
-    def test(self, agent, agent_profile: InspectedAgentProfile, policies: str = ""):
+    def test(
+        self,
+        agent,
+        agent_profile: InspectedAgentProfile,
+        policies: str = "",
+        output_dir: str | Path | None = None,
+    ):
         if dspy.settings.lm is None:
             raise RuntimeError(
                 "No LLM configured. Pass providers=[{'model': '...', 'api_key': '...'}] "
                 "to AgentSentinel() or set LLM_API_KEY + LLM_MODEL env vars."
             )
+
+        out = Path(output_dir) if output_dir else None
+        if out is not None:
+            out.mkdir(parents=True, exist_ok=True)
 
         logger.info("Step 1/3: Generating adversarial prompts")
         generator = AdversarialPromptGenerator()
@@ -30,17 +41,19 @@ class TestAgent():
             warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
             prompts = generator.generate_all(agent_profile, policies)
 
-        with open("adversarial_prompts.json", "w") as f:
-            json.dump(prompts, f, indent=2)
-        logger.info("Saved %d prompts to adversarial_prompts.json", len(prompts))
+        if out is not None:
+            prompts_path = out / "adversarial_prompts.json"
+            prompts_path.write_text(json.dumps(prompts, indent=2))
+            logger.info("Saved %d prompts to %s", len(prompts), prompts_path)
 
         logger.info("Step 2/3: Running prompts against agent")
         runner = AgentRunner()
         responses = runner.run_prompts(agent, prompts)
 
-        with open("agent_responses.json", "w") as f:
-            json.dump(responses, f, indent=2)
-        logger.info("Saved %d responses to agent_responses.json", len(responses))
+        if out is not None:
+            responses_path = out / "agent_responses.json"
+            responses_path.write_text(json.dumps(responses, indent=2))
+            logger.info("Saved %d responses to %s", len(responses), responses_path)
 
         logger.info("Step 3/3: Evaluating responses")
         evaluator = ResponseEvaluator()
@@ -52,10 +65,12 @@ class TestAgent():
                 policy=policies,
             )
 
-        report = generate_report(evaluated)
+        report_path = str(out / "audit_report") if out is not None else None
+        report = generate_report(evaluated, output_path=report_path)
         s = report["summary"]
         logger.info("Audit complete — pass rate: %s%% (%d/%d) | failures: %d",
                     s["pass_rate_pct"], s["passed"], s["total"], s["failed"])
-        logger.info("Report saved to audit_report.json and audit_report.md")
+        if out is not None:
+            logger.info("Report saved to %s", out)
 
         return report

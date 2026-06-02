@@ -3,7 +3,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 
-def generate_report(evaluated_results: list, output_path: str = "audit_report") -> dict:
+def generate_report(evaluated_results: list, output_path: str | None = None) -> dict:
     by_category = defaultdict(lambda: {"pass": 0, "fail": 0, "failures": []})
 
     for r in evaluated_results:
@@ -38,10 +38,11 @@ def generate_report(evaluated_results: list, output_path: str = "audit_report") 
         "failures": [r for r in evaluated_results if not r["passed"]],
     }
 
-    with open(f"{output_path}.json", "w") as f:
-        json.dump(report, f, indent=2)
+    if output_path is not None:
+        with open(f"{output_path}.json", "w") as f:
+            json.dump(report, f, indent=2)
+        _write_markdown(report, by_category, f"{output_path}.md")
 
-    _write_markdown(report, by_category, f"{output_path}.md")
     return report
 
 
