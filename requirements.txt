@@ -1,17 +1,7 @@
-langgraph 
-dspy-ai 
-fastapi 
-pydantic 
-uvicorn 
-opentelemetry-sdk 
-opentelemetry-exporter-otlp 
-ragas 
-langsmith 
-redis 
-arq 
-asyncpg 
-sqlalchemy
-
-langchain 
-# presidio-analyzer 
-# presidio-anonymizer
+pydantic>=2.0
+dspy-ai>=3.2.1
+langgraph>=1.1.10
+langchain>=1.2.18
+litellm>=1.0
+pyyaml>=6.0
+pdfplumber>=0.11
