@@ -1,12 +1,15 @@
 import ast
 import importlib.util
 import logging
+import os
 from pathlib import Path
 from typing import Any, Optional, Sequence, Type
 
 from agentsentinel.models import AgentProfile
 
 logger = logging.getLogger(__name__)
+
+_SAFE_MODE = os.getenv("AGENTSENTINEL_SAFE_MODE", "").lower() in ("1", "true", "yes")
 
 
 class FilePathDetector:
@@ -39,7 +42,19 @@ class FilePathDetector:
         return None
 
     def _import_module(self, path: Path) -> Optional[Any]:
-        """Dynamically import a Python file, return the module object."""
+        """Dynamically import (execute) a Python file to detect live agent objects.
+
+        Set AGENTSENTINEL_SAFE_MODE=true to skip execution and use static AST only.
+        Only pass trusted file paths — executing untrusted files is an RCE risk.
+        """
+        if _SAFE_MODE:
+            logger.info("FilePathDetector: AGENTSENTINEL_SAFE_MODE set — skipping dynamic import")
+            return None
+        logger.warning(
+            "FilePathDetector: executing '%s' for agent detection — "
+            "set AGENTSENTINEL_SAFE_MODE=true to use static AST only",
+            path,
+        )
         spec = importlib.util.spec_from_file_location("_sentinel_agent_module", str(path))
         if spec is None or spec.loader is None:
             return None
