@@ -1,6 +1,8 @@
-from agentsentinel.models.agent import InspectedAgentProfile
+import logging
+import os
 from typing import Optional
 
+from agentsentinel.models.agent import InspectedAgentProfile
 from agentsentinel.core.agents.inspector.analyzers.framework import FrameworkAnalysis
 from agentsentinel.core.agents.inspector.analyzers.memory import MemoryAnalysis
 from agentsentinel.core.agents.inspector.analyzers.policy import PolicyAnalysis
@@ -10,9 +12,10 @@ from agentsentinel.core.agents.inspector.analyzers.semantic import SemanticAnaly
 from agentsentinel.core.agents.inspector.analyzers.tools import ToolsAnalysis
 from agentsentinel.models.intake import ExtractionResult
 from agentsentinel.models import RiskFlag, RiskLevel
-import logging
 
 logger = logging.getLogger(__name__)
+
+_LOG_PROMPTS = os.getenv("AGENTSENTINEL_LOG_PROMPTS", "").lower() in ("1", "true", "yes")
 
 def _fmt_compliance(compliance_results: dict) -> str:
     if not compliance_results:
@@ -172,5 +175,14 @@ def aggregate(
     profile_kwargs["risk_flags"] = flags
     profile_kwargs["overall_risk"] = _overall_risk(flags)
 
-    logger.info("Inspection Results: %s", _fmt_results(profile_kwargs))
+    if _LOG_PROMPTS:
+        logger.info("Inspection Results: %s", _fmt_results(profile_kwargs))
+    else:
+        logger.info(
+            "Inspection complete — agent_id: %s | risk: %s | flags: %d | baseline: %s/100",
+            profile_kwargs.get("agent_id", "?"),
+            profile_kwargs.get("overall_risk", "?"),
+            len(flags),
+            profile_kwargs.get("estimated_baseline_score", "?"),
+        )
     return InspectedAgentProfile(**profile_kwargs)
