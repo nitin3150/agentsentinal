@@ -30,8 +30,8 @@ agentsentinel/
 │   │   │       ├── semantic.py      # LLM-powered semantic analysis
 │   │   │       ├── policy.py        # Policy PDF compliance check
 │   │   │       └── compliances.py   # HIPAA / SOC2 / OWASP / PII rule engine
-│   │   ├── improver/                # DSPy-based prompt rewriter
-│   │   │   ├── prompt_improver.py   # PromptImprover (parallel + sequential fixes)
+│   │   ├── optimizer/               # DSPy-based prompt rewriter
+│   │   │   ├── prompt_optimizer.py  # PromptOptimizer (parallel + sequential fixes)
 │   │   │   ├── signatures.py        # DSPy fix signatures per risk category
 │   │   │   ├── policy_guard.py      # Final policy compliance gate
 │   │   │   └── evaluations.py       # DSPy optimizer metric
@@ -47,9 +47,10 @@ agentsentinel/
 │   │   ├── intake.py                # ExtractionResult
 │   │   └── prompt.py                # OptimizedResult
 │   └── utils/
+│       ├── llm.py                   # Shared agnostic LLM call (call_llm)
 │       ├── policies.py              # PDF policy parser
 │       └── logger.py
-├── demo/                            # Example agents (LangGraph, CrewAI, ADK, etc.)
+├── demo/                            # Example agents (LangGraph, LangChain, CrewAI, etc.)
 ├── tests/
 ├── main.py
 ├── pyproject.toml
@@ -63,7 +64,41 @@ git clone https://github.com/goyalnitin148/agentsentinel.git
 cd agentsentinel
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # set GROQ_API_KEY, GROQ_MODEL, OPENROUTER_API_KEY, MODEL
+cp .env.example .env   # set LLM_MODEL and LLM_API_KEY
+```
+
+## Environment Variables
+
+Agent Sentinel is **LLM-provider agnostic**. All LLM calls go through [LiteLLM](https://docs.litellm.ai), so any supported provider works out of the box.
+
+```bash
+# Required — any litellm-compatible model string
+LLM_MODEL=groq/llama-3.3-70b-versatile
+
+# API key for your chosen provider
+LLM_API_KEY=your_api_key_here
+```
+
+**Provider examples:**
+
+| Provider | `LLM_MODEL` value | Key env var |
+|---|---|---|
+| Groq | `groq/llama-3.3-70b-versatile` | `LLM_API_KEY` or `GROQ_API_KEY` |
+| OpenAI | `openai/gpt-4o` | `LLM_API_KEY` or `OPENAI_API_KEY` |
+| Anthropic | `anthropic/claude-sonnet-4-6` | `LLM_API_KEY` or `ANTHROPIC_API_KEY` |
+| OpenRouter | `openrouter/anthropic/claude-3-5-sonnet` | `LLM_API_KEY` or `OPENROUTER_API_KEY` |
+| Ollama (local) | `ollama/llama3` | *(no key needed)* |
+
+**Optional flags:**
+
+```bash
+LLM_TIMEOUT=30                   # default timeout for all LLM calls (seconds)
+POLICY_TIMEOUT=30                # override for policy analyzer
+SEMANTIC_TIMEOUT=30              # override for semantic analyzer
+COMPLIANCE_TIMEOUT=30            # override for compliance analyzer
+
+AGENTSENTINEL_LOG_PROMPTS=false  # set true to log full prompts (avoid in production)
+AGENTSENTINEL_SAFE_MODE=true     # disables dynamic imports in filepath detector
 ```
 
 ## Core Workflow
@@ -77,7 +112,7 @@ flowchart TD
     E --> F[TestAgent\nAdversarial stress test]
     F --> G{Pass rate ≥ threshold?}
     G -->|yes| H[audit_report.json + .md\nAudit complete]
-    G -->|no| I[PromptImprover\nDSPy-based rewrite]
+    G -->|no| I[PromptOptimizer\nDSPy-based rewrite]
     I --> J[Re-inspect with improved prompt]
     J --> F
     J -.->|max iterations reached| H
@@ -117,7 +152,15 @@ print(profile.risk_flags)
 print(profile.compliance_results)      # per-standard PASS/FAIL + violations
 ```
 
-### 2. `improve(profile)` — prompt rewriting
+Pass a custom LLM at construction time, or let it fall back to `LLM_MODEL` / `LLM_API_KEY`:
+
+```python
+sentinel = AgentSentinel(providers=[
+    {"model": "openai/gpt-4o", "api_key": "sk-..."},
+])
+```
+
+### 2. `optimize(profile)` — prompt rewriting
 
 Takes the `InspectedAgentProfile` and rewrites the system prompt + tool definitions to fix every flagged risk using DSPy `ChainOfThought` signatures. Sequential fixes (injection → persona) run first; remaining fixes run in parallel and are merged.
 
@@ -134,7 +177,7 @@ Risk categories fixed:
 - `TOOL_QUALITY_LOW` — rewrites low-scoring tool descriptions and parameters
 
 ```python
-result = sentinel.improve(profile, policies="sample_policies.pdf")
+result = sentinel.optimize(profile, policies="sample_policies.pdf")
 print(result.improved_prompt)
 print(result.change_log)
 ```
@@ -143,13 +186,15 @@ print(result.change_log)
 
 Three-step pipeline:
 
-1. **Generate** — DSPy generates adversarial prompts targeting every risk flag in the profile → `adversarial_prompts.json`
-2. **Run** — fires each prompt against the live agent (multithreaded) → `agent_responses.json`
+1. **Generate** — DSPy generates adversarial prompts across 10 attack categories → `adversarial_prompts.json`
+2. **Run** — fires each prompt against the live agent → `agent_responses.json`
 3. **Evaluate** — DSPy scores each response for policy compliance → `audit_report.json` + `audit_report.md`
+
+Rate limit errors are caught and logged — partial results are reported rather than crashing.
 
 ```python
 report = sentinel.stress_test(agent, profile, policies="sample_policies.pdf")
-print(report["summary"])   # pass_rate_pct, passed, failed, total
+print(report["summary"])   # pass_rate_pct, passed, failed, skipped, total
 ```
 
 ### 4. `audit(agent)` — full automated loop
@@ -207,26 +252,6 @@ Pass `compliance=["All"]` to check all four standards at once. Rule-based checks
 | LlamaIndex | Demo available (`demo/llamaindex_agent.py`) |
 
 For unsupported frameworks, pass `system_prompt`, `tool_definitions`, and optionally `source_code` directly to `inspect()`.
-
-## Environment Variables
-
-```bash
-# LLM for semantic analysis, compliance, improver, and tester (via Groq)
-GROQ_API_KEY=...
-GROQ_MODEL=llama-3.3-70b-versatile   # or any Groq-hosted model
-
-# Fallback LLM for compliance checks (via Google Gemini)
-GOOGLE_API_KEY=...
-GEMINI_MODEL=gemini-2.0-flash        # optional, defaults to gemini-2.0-flash
-
-# LLM for demo agents (via OpenRouter)
-OPENROUTER_API_KEY=...
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-MODEL=stepfun/step-3.5-flash
-
-# Optional
-COMPLIANCE_TIMEOUT=30                # seconds per compliance LLM call (default: 30)
-```
 
 ## Running Tests
 
