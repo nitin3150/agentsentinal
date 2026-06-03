@@ -4,10 +4,33 @@
 
 from dotenv import load_dotenv
 load_dotenv()
+
 import os
-from langchain_openai import ChatOpenAI
+import litellm
+from typing import Any, Optional
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import BaseMessage, AIMessage
+from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain.tools import tool
 from langchain.agents import create_agent
+
+# ── LiteLLM wrapper ──────────────────────────────────────
+
+class LiteLLMChat(BaseChatModel):
+    model: str
+
+    def _generate(self, messages: list[BaseMessage], stop: Optional[list[str]] = None, run_manager: Any = None, **kwargs) -> ChatResult:
+        lm_messages = [
+            {"role": "user" if m.type == "human" else m.type, "content": m.content}
+            for m in messages
+        ]
+        response = litellm.completion(model=self.model, messages=lm_messages)
+        content = response.choices[0].message.content  # type: ignore[union-attr]
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=content))])
+
+    @property
+    def _llm_type(self) -> str:
+        return "litellm"
 
 # ── Tools ────────────────────────────────────────────────
 
@@ -23,13 +46,9 @@ SYSTEM_PROMPT = """
 You are a helpful assistant.
 """
 
-_model = os.getenv("GROQ_MODEL", "stepfun/step-3.5-flash")
-_model = _model.split("/", 1)[-1] if "/" in _model else _model
-
-chatbot = ChatOpenAI(
-    model=_model,
-    openai_api_base=os.getenv("GROQ_BASE_URL"),
-    openai_api_key=os.getenv("GROQ_API_KEY"),
+_groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+chatbot = LiteLLMChat(
+    model=_groq_model if _groq_model.startswith("groq/") else f"groq/{_groq_model}",
 )
 
 agent = create_agent(
