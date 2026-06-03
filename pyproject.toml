@@ -9,13 +9,27 @@ build-backend = "hatchling.build"
 packages = ["src/agentsentinel"]
 artifacts = ["src/agentsentinel/compliance/*.yaml"]
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+    ".venv/",
+    "venv/",
+    ".claude/",
+    "demo/",
+    "tests/",
+    "*.env",
+    ".env*",
+    "__pycache__/",
+    "*.pyc",
+    ".git/",
+]
+
 [project]
-name = "agentsentinel"
+name = "agentsentinel-ai"
 version = "0.1.0"
 description = "Production-readiness platform for AI agents — inspect, improve, and stress-test before you ship."
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = {file = "LICENSE"}
 authors = [
     {name = "Nitin Goyal", email = "goyal.niti@northeastern.edu"},
 ]
@@ -48,5 +62,7 @@ llama   = ["llama-index>=0.14.21"]
 demo    = ["agentsentinel[crewai,adk,llama]"]
 
 [project.urls]
-Homepage   = "https://github.com/goyalnitin148/agentsentinel"
-Repository = "https://github.com/goyalnitin148/agentsentinel"
+Homepage      = "https://github.com/nitin3150/agentsentinel"
+Repository    = "https://github.com/nitin3150/agentsentinel"
+Documentation = "https://github.com/nitin3150/agentsentinel#readme"
+"Bug Tracker" = "https://github.com/nitin3150/agentsentinel/issues"

@@ -57,13 +57,44 @@ agentsentinel/
 └── .env
 ```
 
+## Installation
+
+```bash
+pip install agentsentinel-ai
+```
+
+```bash
+uv add agentsentinel-ai
+```
+
 ## Quick Start
+
+```python
+from agentsentinel.sentinel import AgentSentinel
+
+sentinel = AgentSentinel()
+result = sentinel.audit(
+    agent,
+    compliance=["hipaa", "owasp"],
+    pass_threshold=85.0,
+)
+print(result["report"]["summary"])
+```
+
+Set your LLM provider in the environment before running:
+
+```bash
+export LLM_MODEL=groq/llama-3.3-70b-versatile
+export LLM_API_KEY=your_api_key_here
+```
+
+**From source:**
 
 ```bash
 git clone https://github.com/nitin3150/agentsentinel.git
 cd agentsentinel
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 cp .env.example .env   # set LLM_MODEL and LLM_API_KEY
 ```
 
