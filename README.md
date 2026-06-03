@@ -247,9 +247,6 @@ Pass `compliance=["All"]` to check all four standards at once. Rule-based checks
 |---|---|
 | LangGraph | Full support — live object + source file |
 | LangChain | Partial — pass `system_prompt` and `tool_definitions` explicitly |
-| CrewAI | Demo available (`demo/crewai_agent.py`) |
-| Google ADK | Demo available (`demo/google_adk_agent.py`) |
-| LlamaIndex | Demo available (`demo/llamaindex_agent.py`) |
 
 For unsupported frameworks, pass `system_prompt`, `tool_definitions`, and optionally `source_code` directly to `inspect()`.
 
