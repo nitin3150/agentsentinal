@@ -60,7 +60,7 @@ agentsentinel/
 ## Quick Start
 
 ```bash
-git clone https://github.com/goyalnitin148/agentsentinel.git
+git clone https://github.com/nitin3150/agentsentinel.git
 cd agentsentinel
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
