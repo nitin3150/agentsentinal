@@ -42,11 +42,16 @@ class AgentSentinel:
             if fallbacks:
                 litellm.fallbacks = fallbacks
             return lm
-        model = os.getenv("GROQ_MODEL") or os.getenv("OPENROUTER_MODEL") or ""
-        api_key = os.getenv("GROQ_API_KEY") or os.getenv("OPENROUTER_API_KEY") or ""
-        if model and api_key:
-            return dspy.LM(model, api_key=api_key, num_retries=3)
-        return None
+        model = (
+            os.getenv("LLM_MODEL")
+            or os.getenv("GROQ_MODEL")
+            or os.getenv("OPENROUTER_MODEL")
+            or ""
+        )
+        if not model:
+            return None
+        api_key = os.getenv("LLM_API_KEY") or os.getenv("GROQ_API_KEY") or os.getenv("OPENROUTER_API_KEY") or ""
+        return dspy.LM(model, api_key=api_key, num_retries=3) if api_key else dspy.LM(model, num_retries=3)
 
     @contextmanager
     def _lm_context(self):

@@ -129,6 +129,8 @@ def _check_rules_static(
     return violations, ambiguous
 
 
+from agentsentinel.utils.llm import call_llm
+
 COMPLIANCE_TIMEOUT = float(os.getenv("COMPLIANCE_TIMEOUT", "30"))
 
 _LLM_PROMPT = """You are an AI compliance auditor. Rule-based analysis flagged the rules below as potentially violated for the {standard} standard.
@@ -160,49 +162,6 @@ Return ONLY this JSON:
 No prose, no markdown fences."""
 
 
-async def _llm_call(prompt: str) -> str | None:
-    """Try Groq first, Gemini fallback via litellm. Returns raw LLM text or None."""
-    import litellm
-
-    groq_key = os.getenv("GROQ_API_KEY")
-    groq_model = os.getenv("GROQ_MODEL", "groq/llama-3.3-70b-versatile")
-    if not groq_model.startswith("groq/"):
-        groq_model = f"groq/{groq_model}"
-    if groq_key:
-        try:
-            resp: Any = await asyncio.wait_for(
-                litellm.acompletion(
-                    model=groq_model,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0,
-                    api_key=groq_key,
-                ),
-                timeout=COMPLIANCE_TIMEOUT,
-            )
-            return resp.choices[0].message.content
-        except Exception as exc:
-            logger.warning("Compliance LLM call (Groq) failed: %s", type(exc).__name__)
-
-    gemini_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-    gemini_model = os.getenv("GEMINI_MODEL", "gemini/gemini-2.0-flash")
-    if not gemini_model.startswith("gemini/"):
-        gemini_model = f"gemini/{gemini_model}"
-    if gemini_key:
-        try:
-            resp: Any = await asyncio.wait_for(
-                litellm.acompletion(
-                    model=gemini_model,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0,
-                    api_key=gemini_key,
-                ),
-                timeout=COMPLIANCE_TIMEOUT,
-            )
-            return resp.choices[0].message.content
-        except Exception as exc:
-            logger.warning("Compliance LLM call (Gemini) failed: %s", type(exc).__name__)
-
-    return None
 
 
 def _tolerant_json_load(text: str) -> dict | None:
@@ -250,7 +209,7 @@ async def _confirm_with_llm(
         flagged_rules=flagged_text,
     )
 
-    raw = await _llm_call(prompt)
+    raw = await call_llm(prompt, timeout=COMPLIANCE_TIMEOUT)
     if not raw:
         return []
 

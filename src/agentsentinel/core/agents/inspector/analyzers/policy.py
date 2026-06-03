@@ -10,8 +10,8 @@ from agentsentinel.models.policies import PolicyAnalysis, PolicyViolation
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+from agentsentinel.utils.llm import call_llm, DEFAULT_LLM_MODEL
+
 POLICY_TIMEOUT = float(os.getenv("POLICY_TIMEOUT", "30"))
 
 POLICY_PROMPT = """You are an AI compliance auditor. Check whether the agent configuration below violates any rules in the provided policy document.
@@ -118,54 +118,6 @@ def _parse_payload(payload: dict) -> PolicyAnalysis:
     )
 
 
-async def _call_groq(rendered_prompt: str) -> Optional[str]:
-    import litellm
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        return None
-    model = DEFAULT_GROQ_MODEL if DEFAULT_GROQ_MODEL.startswith("groq/") else f"groq/{DEFAULT_GROQ_MODEL}"
-    try:
-        response = await asyncio.wait_for(
-            litellm.acompletion(
-                model=model,
-                messages=[{"role": "user", "content": rendered_prompt}],
-                temperature=0,
-                api_key=api_key,
-            ),
-            timeout=POLICY_TIMEOUT,
-        )
-        return response.choices[0].message.content
-    except asyncio.TimeoutError:
-        logger.warning("Policy analysis (Groq) timed out after %.0fs", POLICY_TIMEOUT)
-        return None
-    except Exception as exc:
-        logger.warning("Policy analysis (Groq) failed: %s", type(exc).__name__)
-        return None
-
-
-async def _call_gemini(rendered_prompt: str) -> Optional[str]:
-    import litellm
-    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        return None
-    model = DEFAULT_GEMINI_MODEL if DEFAULT_GEMINI_MODEL.startswith("gemini/") else f"gemini/{DEFAULT_GEMINI_MODEL}"
-    try:
-        resp = await asyncio.wait_for(
-            litellm.acompletion(
-                model=model,
-                messages=[{"role": "user", "content": rendered_prompt}],
-                temperature=0,
-                api_key=api_key,
-            ),
-            timeout=POLICY_TIMEOUT,
-        )
-        return resp.choices[0].message.content
-    except asyncio.TimeoutError:
-        logger.warning("Policy analysis (Gemini) timed out after %.0fs", POLICY_TIMEOUT)
-        return None
-    except Exception as exc:
-        logger.warning("Policy analysis (Gemini) failed: %s", type(exc).__name__)
-        return None
 
 
 async def analyze_policy(
@@ -188,7 +140,7 @@ async def analyze_policy(
         policy_text=policy_text[:6000],
     )
 
-    raw = await _call_groq(rendered) or await _call_gemini(rendered)
+    raw = await call_llm(rendered, timeout=POLICY_TIMEOUT)
     if not raw:
         return PolicyAnalysis()
 

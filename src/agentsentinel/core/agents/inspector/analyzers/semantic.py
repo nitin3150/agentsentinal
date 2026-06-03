@@ -11,8 +11,8 @@ from agentsentinel.models import RiskCategory, RiskFlag, RiskLevel
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-DEFAULT_GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+from agentsentinel.utils.llm import call_llm
+
 SEMANTIC_TIMEOUT = float(os.getenv("SEMANTIC_TIMEOUT", "30"))
 
 SEMANTIC_PROMPT = """You are an AI agent auditor. Analyse the system prompt below and return JSON only.
@@ -134,54 +134,6 @@ def _parse_payload(payload: dict) -> SemanticAnalysis:
     )
 
 
-async def _call_groq(rendered_prompt: str) -> Optional[str]:
-    import litellm
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        return None
-    model = DEFAULT_GROQ_MODEL if DEFAULT_GROQ_MODEL.startswith("groq/") else f"groq/{DEFAULT_GROQ_MODEL}"
-    try:
-        response = await asyncio.wait_for(
-            litellm.acompletion(
-                model=model,
-                messages=[{"role": "user", "content": rendered_prompt}],
-                temperature=0,
-                api_key=api_key,
-            ),
-            timeout=SEMANTIC_TIMEOUT,
-        )
-        return response.choices[0].message.content
-    except asyncio.TimeoutError:
-        logger.warning("Semantic analysis (Groq) timed out after %.0fs", SEMANTIC_TIMEOUT)
-        return None
-    except Exception as exc:
-        logger.warning("Semantic analysis (Groq) failed: %s", type(exc).__name__)
-        return None
-
-
-async def _call_gemini(rendered_prompt: str) -> Optional[str]:
-    import litellm
-    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        return None
-    model = DEFAULT_GEMINI_MODEL if DEFAULT_GEMINI_MODEL.startswith("gemini/") else f"gemini/{DEFAULT_GEMINI_MODEL}"
-    try:
-        resp = await asyncio.wait_for(
-            litellm.acompletion(
-                model=model,
-                messages=[{"role": "user", "content": rendered_prompt}],
-                temperature=0,
-                api_key=api_key,
-            ),
-            timeout=SEMANTIC_TIMEOUT,
-        )
-        return resp.choices[0].message.content
-    except asyncio.TimeoutError:
-        logger.warning("Semantic analysis (Gemini) timed out after %.0fs", SEMANTIC_TIMEOUT)
-        return None
-    except Exception as exc:
-        logger.warning("Semantic analysis (Gemini) failed: %s", type(exc).__name__)
-        return None
 
 
 async def analyze_semantic(
@@ -203,7 +155,7 @@ async def analyze_semantic(
         constraint_count=static_findings.get("constraint_count", 0),
     )
 
-    raw = await _call_groq(rendered) or await _call_gemini(rendered)
+    raw = await call_llm(rendered, timeout=SEMANTIC_TIMEOUT)
     if not raw:
         return SemanticAnalysis()
 
