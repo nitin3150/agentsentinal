@@ -2,6 +2,8 @@
 
 Agent Sentinel inspects, improves, and stress-tests AI agents before they ship. It performs static + semantic analysis of an agent's system prompt, tool definitions, memory, and framework structure, produces a risk report, rewrites the prompt to fix every flagged issue, and runs adversarial prompt campaigns to verify the fixes hold under pressure.
 
+![Agent Sentinel screenshot](assets/agent_demo.png)
+
 ## Repository Structure
 
 ```
@@ -135,7 +137,7 @@ AGENTSENTINEL_SAFE_MODE=true     # disables dynamic imports in filepath detector
 ## Core Workflow
 
 ```mermaid
-flowchart TD
+flowchart LR
     A[Your Agent / Source File] --> B[AgentIntake\nFramework detection + profile extraction]
     B --> C[InspectorAgent\nStatic analyzers run first\nprompt · tools · memory · framework]
     C --> D[Concurrent LLM analyses\nsemantic · policy · compliance]
