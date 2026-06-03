@@ -1,7 +1,7 @@
 import re
 import dspy
 
-from agentsentinel.core.agents.improver.signatures import CheckPolicyCompliance
+from agentsentinel.core.agents.optimizer.signatures import CheckPolicyCompliance
 
 
 class PolicyGuard:

@@ -1,5 +1,5 @@
 """
-prompt_improver.py
+prompt_optimizer.py
 ──────────────────
 DSPy-based module that consumes an AgentProfile from AgentSentinel's
 InspectorAgent and automatically rewrites the agent's system prompt
@@ -9,7 +9,7 @@ government regulations.
 Usage:
     import asyncio
     import dspy
-    from prompt_improver import PromptImprover, build_optimized_improver
+    from prompt_optimizer import PromptOptimizer, build_optimized_improver
     from agentsentinel.core.agents.inspector import InspectorAgent
 
     dspy.configure(lm=dspy.LM("openai/gpt-4o"))
@@ -21,7 +21,7 @@ Usage:
         tool_definitions=my_tools,
     ))
 
-    improver = PromptImprover()
+    improver = PromptOptimizer()
     result   = improver(
         original_prompt  = my_prompt,
         tool_definitions = my_tools,
@@ -49,7 +49,7 @@ from agentsentinel.models.agent import (
     ToolProfile,
 )
 
-from agentsentinel.core.agents.improver.signatures import (
+from agentsentinel.core.agents.optimizer.signatures import (
     FixAmbiguousInstructions,
     FixConstraintsMissing,
     FixHallucinationProne,
@@ -62,8 +62,8 @@ from agentsentinel.core.agents.improver.signatures import (
     MergePromptSections,
 )
 
-from agentsentinel.core.agents.improver.policy_guard import PolicyGuard
-from agentsentinel.models.prompt import ImprovementResult, ChangeLogEntry
+from agentsentinel.core.agents.optimizer.policy_guard import PolicyGuard
+from agentsentinel.models.prompt import OptimizedResult, ChangeLogEntry
 import logging
 import difflib
 
@@ -81,7 +81,7 @@ def _low_quality_tools(profile: InspectedAgentProfile) -> list[ToolProfile]:
     return [t for t in profile.tool_profiles if t.quality_score < 7]
 
 
-def _fmt_result(result: "ImprovementResult") -> str:
+def _fmt_result(result: "OptimizedResult") -> str:
     violations = result.policy_violations or ["none"]
     changes = "\n".join(
         f"    {i+1}. [{e.field}] {e.reason}"
@@ -89,12 +89,12 @@ def _fmt_result(result: "ImprovementResult") -> str:
     ) or "    (none)"
     tools = "\n".join(
         f"    • {t.get('name', '?')} — {t.get('description', '')[:80]}"
-        for t in result.improved_tool_definitions
+        for t in result.optimized_tool_definitions
     ) or "    (none)"
     return (
         f"\n  --- Improved Prompt ---"
-        f"\n  {result.improved_prompt}"
-        f"\n  --- Tools ({len(result.improved_tool_definitions)}) ---\n{tools}"
+        f"\n  {result.optimized_prompt}"
+        f"\n  --- Tools ({len(result.optimized_tool_definitions)}) ---\n{tools}"
         f"\n  --- Change Log ({len(result.change_log)}) ---\n{changes}"
         f"\n  --- Policy Violations ---"
         f"\n  {', '.join(violations)}"
@@ -147,7 +147,7 @@ def _safe_call(fn, label: str, change_log: list[ChangeLogEntry], **kwargs):
         ))
         return None
 
-class PromptImprover(dspy.Module):
+class PromptOptimizer(dspy.Module):
     """
     Orchestrates all fix signatures.
     Only applies a fix when the Inspector has flagged that risk category.
@@ -189,7 +189,7 @@ class PromptImprover(dspy.Module):
         agent_profile:    InspectedAgentProfile,
         policies:   str = "",
         regulations:      str = "",
-    ) -> ImprovementResult:
+    ) -> OptimizedResult:
 
         tool_definitions = agent_profile.tool_definitions or []
         prompt     = agent_profile.system_prompt
@@ -405,14 +405,14 @@ class PromptImprover(dspy.Module):
         else:
             logger.info("Diff: no changes — prompt unchanged after all fixes.")
 
-        result = ImprovementResult(
-            improved_prompt           = prompt,
-            improved_tool_definitions = improved_tools,
+        result = OptimizedResult(
+            optimized_prompt           = prompt,
+            optimized_tool_definitions = improved_tools,
             change_log                = change_log,
             policy_violations         = violations,
             diff                      = diff,
         )
-        logger.info("Improvement complete: %s", _fmt_result(result))
+        logger.info("Optimization complete: %s", _fmt_result(result))
         return result
 
     async def _merge_prompts(

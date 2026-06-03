@@ -6,9 +6,9 @@ class ChangeLogEntry(BaseModel):
     after: str
     reason: str
 
-class ImprovementResult(BaseModel):
+class OptimizedResult(BaseModel):
     """
-    Returned by PromptImprover.forward().
+    Returned by PromptOptimized.forward().
 
     improved_prompt:
         Drop-in replacement for the original system prompt.
@@ -25,8 +25,8 @@ class ImprovementResult(BaseModel):
         Empty list = clean.  Non-empty = the improved prompt still
         contains policy-violating content and must not be deployed.
     """
-    improved_prompt:           str
-    improved_tool_definitions: list[dict]
+    optimized_prompt:           str
+    optimized_tool_definitions: list[dict]
     change_log:                list[ChangeLogEntry]
     policy_violations:         list[str]
     diff:                      str = ""

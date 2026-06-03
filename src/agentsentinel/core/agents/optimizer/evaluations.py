@@ -1,10 +1,13 @@
-from agentsentinel.core.agents.improver.policy_guard import PolicyGuard
+from agentsentinel.core.agents.optimizer.policy_guard import PolicyGuard
 import asyncio
+import logging
 from agentsentinel.models.agent import AgentProfile, InspectedAgentProfile
 import dspy
 from typing import Any
-from agentsentinel.models.prompt import ImprovementResult
-from agentsentinel.core.agents.improver.prompt_improver import PromptImprover
+from agentsentinel.models.prompt import OptimizedResult
+from agentsentinel.core.agents.optimizer.prompt_optimizer import PromptOptimizer
+
+logger = logging.getLogger("agentsentinel.improver.evaluations")
 
 class ImprovementMetric:
     """
@@ -22,7 +25,7 @@ class ImprovementMetric:
     def __call__(
         self,
         example,     # dspy.Example — see build_optimized_improver for required fields
-        prediction,  # ImprovementResult
+        prediction,  # OptimizedResult
         trace=None,
     ) -> float:
 
@@ -42,7 +45,7 @@ class ImprovementMetric:
                 )
             )
         except Exception as exc:
-            print(f"[ImprovementMetric] Inspector error: {exc}")
+            logger.error("ImprovementMetric inspector error: %s", exc)
             return -50.0
 
         original: InspectedAgentProfile = example.agent_profile
@@ -92,9 +95,9 @@ def build_optimized_improver(
     company_policy:  str = "",
     regulations:     str = "",
     lm_model_string: str = "openai/gpt-4o",
-) -> PromptImprover:
+) -> PromptOptimizer:
     """
-    Compiles a PromptImprover optimised for your Inspector, policy,
+    Compiles a PromptOptimizer optimised for your Inspector, policy,
     and regulations via DSPy's BootstrapFewShot.
 
     Each trainset entry must be created like this:
@@ -122,21 +125,17 @@ def build_optimized_improver(
     _bound_regs   = regulations
 
     # Bind policy context so the optimiser doesn't need to pass it per-call
-    class BoundImprover(PromptImprover):
+    class BoundImprover(PromptOptimizer):
         async def forward(
             self,
             agent_profile:    InspectedAgentProfile,
-            company_policy:   str = "",
+            policies:         str = "",
             regulations:      str = "",
-            original_prompt:  str = "",
-            tool_definitions: list[dict] = [],
-        ) -> ImprovementResult:
+        ) -> OptimizedResult:
             return await super().forward(
-                agent_profile    = agent_profile,
-                company_policy   = company_policy or _bound_policy,
-                regulations      = regulations or _bound_regs,
-                original_prompt  = original_prompt,
-                tool_definitions = tool_definitions,
+                agent_profile = agent_profile,
+                policies      = policies or _bound_policy,
+                regulations   = regulations or _bound_regs,
             )
     optimizer = dspy.BootstrapFewShot(
         metric                 = metric,
