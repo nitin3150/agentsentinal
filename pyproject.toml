@@ -38,6 +38,7 @@ dependencies = [
     "litellm>=1.0",
     "pyyaml>=6.0",
     "pdfplumber>=0.11",
+    "langchain-openai>=1.2.2",
 ]
 
 [project.optional-dependencies]

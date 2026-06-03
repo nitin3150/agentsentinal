@@ -45,7 +45,7 @@ agentsentinel/
 │   │   ├── agent.py                 # AgentProfile, InspectedAgentProfile, RiskFlag
 │   │   ├── policies.py              # ComplianceViolation, ComplianceAnalysis
 │   │   ├── intake.py                # ExtractionResult
-│   │   └── prompt.py                # ImprovementResult
+│   │   └── prompt.py                # OptimizedResult
 │   └── utils/
 │       ├── policies.py              # PDF policy parser
 │       └── logger.py

@@ -3,7 +3,11 @@ load_dotenv()
 
 import os
 import sys
+import warnings
 from pathlib import Path
+
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
+warnings.filterwarnings("ignore", category=PendingDeprecationWarning)  # LangChainPendingDeprecationWarning
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -34,9 +38,9 @@ if __name__ =="__main__":
         compliance=['PII', 'hipaa', 'soc2']
     )
 
-    # result = sentinel.improve(
-    #     agent_profile=profile,
-    #     policies=policies,
-    # )
+    result = sentinel.optimize(
+        agent_profile=profile,
+        policies=policies,
+    )
 
-    # sentinel.stress_test(agent, profile, policies=policies)
+    sentinel.stress_test(agent, profile, policies=policies)
