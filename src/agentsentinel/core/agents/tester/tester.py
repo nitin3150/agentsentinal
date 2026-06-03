@@ -46,6 +46,10 @@ class TestAgent():
             prompts_path.write_text(json.dumps(prompts, indent=2))
             logger.info("Saved %d prompts to %s", len(prompts), prompts_path)
 
+        if not prompts:
+            logger.error("No adversarial prompts generated — stress test aborted.")
+            return {"summary": {"total": 0, "passed": 0, "failed": 0, "skipped": 0, "pass_rate_pct": 0}, "by_category": {}, "failures": []}
+
         logger.info("Step 2/3: Running prompts against agent")
         runner = AgentRunner()
         responses = runner.run_prompts(agent, prompts)

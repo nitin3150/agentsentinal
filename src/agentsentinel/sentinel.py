@@ -1,14 +1,17 @@
 import asyncio
 import concurrent.futures
 import contextvars
+import warnings
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TypedDict, Any, Optional
-from langgraph.graph import StateGraph, START, END
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    from langgraph.graph import StateGraph, START, END
 from agentsentinel.core.agents.inspector import InspectorAgent
 from agentsentinel.core.agents.intake.agent_intake import AgentIntake
 from agentsentinel.models.agent import InspectedAgentProfile, AgentProfile
-from agentsentinel.core.agents.improver.prompt_improver import PromptImprover
+from agentsentinel.core.agents.optimizer.prompt_optimizer import PromptOptimizer
 from agentsentinel.core.agents.tester.tester import TestAgent
 import logging
 import os
@@ -27,7 +30,7 @@ class AgentSentinel:
         self._lm = self._build_lm(providers)
         self._intake = AgentIntake()
         self._inspector = InspectorAgent()
-        self._improver = PromptImprover()
+        self._optimizer = PromptOptimizer()
         self._workflow = self._build_workflow()
 
     def _build_lm(self, providers: list[dict] | None) -> "dspy.LM | None":
@@ -79,7 +82,23 @@ class AgentSentinel:
         inspected_profile = await self._inspector.inspect(state["agent_profile"])
         return {"inspected_profile": inspected_profile}
 
+    @staticmethod
+    async def _close_litellm_session() -> None:
+        """Close LiteLLM's global aiohttp session before the event loop shuts down."""
+        handler = getattr(litellm, "base_llm_aiohttp_handler", None)
+        if handler is None:
+            return
+        session = getattr(handler, "client_session", None)
+        if session is not None and not session.closed:
+            await session.close()
+
     def _run_async(self, coro):
+        async def _wrapped():
+            try:
+                return await coro
+            finally:
+                await self._close_litellm_session()
+
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -88,10 +107,10 @@ class AgentSentinel:
         if loop is not None and loop.is_running():
             ctx = contextvars.copy_context()
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(ctx.run, asyncio.run, coro)
+                future = pool.submit(ctx.run, asyncio.run, _wrapped())
                 return future.result()
 
-        return asyncio.run(coro)
+        return asyncio.run(_wrapped())
 
     def _invoke(self, initial_state: SentinelState) -> SentinelState:
         return self._run_async(self._workflow.ainvoke(initial_state))  # type: ignore[return-value]
@@ -131,7 +150,7 @@ class AgentSentinel:
         with self._lm_context():
             return self._run_async(self._inspector.inspect(profile, policies, compliance or []))
 
-    def improve(self, agent_profile: InspectedAgentProfile, policies: str = ""):
+    def optimize(self, agent_profile: InspectedAgentProfile, policies: str = ""):
         policy_text = policies
         if policies and os.path.isfile(policies):
             from agentsentinel.utils.policies import parse_policy_pdf
@@ -142,7 +161,7 @@ class AgentSentinel:
                 logger.warning("Failed to parse policy PDF '%s': %s", policies, exc)
 
         with self._lm_context():
-            return self._improver(
+            return self._optimizer(
                 agent_profile=agent_profile,
                 policies=policy_text,
             )
@@ -212,13 +231,13 @@ class AgentSentinel:
 
             logger.info("Below threshold — running optimizer (iteration %d)...", iteration)
             with self._lm_context():
-                improvement = self._improver(agent_profile=profile, policies=policies)
+                improvement = self._optimizer(agent_profile=profile, policies=policies)
 
             logger.info("Optimizer complete — re-inspecting with improved prompt...")
             profile = self.inspect(
                 agent=agent,
                 domain=domain,
-                system_prompt=improvement.improved_prompt,
+                system_prompt=improvement.optimized_prompt,
                 tools=tools or [],
                 policies=policies,
                 compliance=compliance or [],

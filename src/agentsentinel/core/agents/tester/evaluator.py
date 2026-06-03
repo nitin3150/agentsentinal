@@ -1,6 +1,8 @@
 import logging
+import re
 import time
 import dspy
+from litellm.exceptions import RateLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -31,30 +33,59 @@ class ResponseEvaluator:
         self.evaluator = dspy.Predict(EvaluateAdversarialResponse)
 
     def evaluate_one(self, record: dict, system_prompt: str, policy: str) -> dict:
-        result = self.evaluator(
-            category=record["category"],
-            system_prompt=system_prompt,
-            policy=policy,
-            adversarial_prompt=record["prompt"],
-            agent_response=record.get("response", ""),
-        )
+        try:
+            result = self.evaluator(
+                category=record["category"],
+                system_prompt=system_prompt,
+                policy=policy,
+                adversarial_prompt=record["prompt"],
+                agent_response=record.get("response", ""),
+            )
+            passed = str(result.passed).strip().lower() in ("true", "yes", "1")
+            return {
+                **record,
+                "passed": passed,
+                "severity": result.severity.strip().lower() if not passed else "none",
+                "reason": result.reason.strip(),
+                "violated_policy": result.violated_policy.strip(),
+            }
+        except RateLimitError as exc:
+            logger.warning("Rate limit hit evaluating [%s]: %s", record["category"], exc)
+            return {**record, "passed": None, "severity": "unknown", "reason": "skipped — rate limit", "violated_policy": "unknown", "error": "rate_limit"}
+        except Exception as exc:
+            logger.error("Evaluation failed for [%s]: %s", record["category"], exc)
+            return {**record, "passed": None, "severity": "unknown", "reason": f"skipped — {type(exc).__name__}", "violated_policy": "unknown", "error": type(exc).__name__}
 
-        passed = str(result.passed).strip().lower() in ("true", "yes", "1")
-        return {
-            **record,
-            "passed": passed,
-            "severity": result.severity.strip().lower() if not passed else "none",
-            "reason": result.reason.strip(),
-            "violated_policy": result.violated_policy.strip(),
-        }
+    @staticmethod
+    def _parse_retry_after(exc: RateLimitError) -> float | None:
+        m = re.search(r"try again in ([\d.]+)m([\d.]+)s", str(exc))
+        if m:
+            return float(m.group(1)) * 60 + float(m.group(2))
+        m = re.search(r"try again in ([\d.]+)s", str(exc))
+        return float(m.group(1)) if m else None
 
     def evaluate_all(self, responses: list, system_prompt: str, policy: str, delay: float = 8.0) -> list:
         results = []
+        consecutive_rate_limits = 0
         for i, record in enumerate(responses):
             if i > 0:
                 time.sleep(delay)
             evaluated = self.evaluate_one(record, system_prompt, policy)
-            status = "PASS" if evaluated["passed"] else f"FAIL [{evaluated['severity']}]"
+            if evaluated.get("error") == "rate_limit":
+                consecutive_rate_limits += 1
+                if consecutive_rate_limits >= 3:
+                    logger.error(
+                        "Rate limit exhausted — stopping evaluation after %d/%d. "
+                        "Remaining %d records marked as skipped.",
+                        i + 1, len(responses), len(responses) - i - 1,
+                    )
+                    results.append(evaluated)
+                    for remaining in responses[i + 1:]:
+                        results.append({**remaining, "passed": None, "severity": "unknown", "reason": "skipped — rate limit exhausted", "violated_policy": "unknown", "error": "rate_limit"})
+                    break
+            else:
+                consecutive_rate_limits = 0
+            status = "PASS" if evaluated["passed"] else ("ERROR" if evaluated["passed"] is None else f"FAIL [{evaluated['severity']}]")
             logger.info("[%d/%d] %s — %s", i + 1, len(responses), record["category"], status)
             results.append(evaluated)
         return results

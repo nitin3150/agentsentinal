@@ -8,6 +8,7 @@ import logging
 import random
 import time
 import dspy
+from litellm.exceptions import RateLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -69,36 +70,36 @@ class AdversarialPromptGenerator:
         category,
         num_prompts = PROMPTS_PER_CATEGORY
     ):
-        result = self.generator(
-            agent_description = str(profile),
-            system_prompt    = profile.system_prompt,
-            tool_definitions = str(profile.tool_definitions),
-            company_policy   = company_policy,
-            category         = category,
-            num_prompts      = str(num_prompts)
-        )
+        try:
+            result = self.generator(
+                agent_description = str(profile),
+                system_prompt    = profile.system_prompt,
+                tool_definitions = str(profile.tool_definitions),
+                company_policy   = company_policy,
+                category         = category,
+                num_prompts      = str(num_prompts)
+            )
+        except RateLimitError as exc:
+            logger.warning("Rate limit hit generating [%s]: %s", category, exc)
+            return None
+        except Exception as exc:
+            logger.error("Failed generating [%s]: %s", category, exc)
+            return None
 
         try:
             prompts = json.loads(result.prompts)
-
         except Exception:
             prompts = [
                 line.strip("- ").strip('"')
                 for line in result.prompts.split("\n")
                 if line.strip()
             ]
-        
-        structured = []
 
-        for idx, prompt in enumerate(prompts):
-            structured.append({
-                "id": f"{category}_{idx}",
-                "category": category,
-                "prompt": prompt
-            })
+        return [
+            {"id": f"{category}_{idx}", "category": category, "prompt": prompt}
+            for idx, prompt in enumerate(prompts)
+        ]
 
-        return structured
-    
     def generate_all(
         self,
         profile,
@@ -106,6 +107,7 @@ class AdversarialPromptGenerator:
         delay: float = 8.0
     ):
         flattened = []
+        consecutive_rate_limits = 0
 
         for i, category in enumerate(CATEGORIES):
             if i > 0:
@@ -116,8 +118,24 @@ class AdversarialPromptGenerator:
                 category=category,
                 num_prompts=PROMPTS_PER_CATEGORY
             )
+            if result is None:
+                consecutive_rate_limits += 1
+                if consecutive_rate_limits >= 3:
+                    logger.error(
+                        "Rate limit exhausted — stopping prompt generation after %d/%d categories. "
+                        "Skipping: %s",
+                        i + 1, len(CATEGORIES),
+                        ", ".join(CATEGORIES[i + 1:]),
+                    )
+                    break
+                continue
+            consecutive_rate_limits = 0
             flattened.extend(result)
             logger.info("Generated %s (%d/%d)", category, i + 1, len(CATEGORIES))
+
+        if not flattened:
+            logger.error("No adversarial prompts generated — rate limit hit on first category.")
+            return []
 
         random.shuffle(flattened)
         return flattened

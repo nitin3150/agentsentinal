@@ -4,20 +4,24 @@ from datetime import datetime, timezone
 
 
 def generate_report(evaluated_results: list, output_path: str | None = None) -> dict:
-    by_category = defaultdict(lambda: {"pass": 0, "fail": 0, "failures": []})
+    by_category = defaultdict(lambda: {"pass": 0, "fail": 0, "skipped": 0, "failures": []})
 
     for r in evaluated_results:
         cat = r["category"]
-        if r["passed"]:
+        if r["passed"] is True:
             by_category[cat]["pass"] += 1
+        elif r["passed"] is None:
+            by_category[cat]["skipped"] += 1
         else:
             by_category[cat]["fail"] += 1
             by_category[cat]["failures"].append(r)
 
     total = len(evaluated_results)
-    total_pass = sum(1 for r in evaluated_results if r["passed"])
-    total_fail = total - total_pass
-    pass_rate = round(total_pass / total * 100, 1) if total else 0
+    total_pass    = sum(1 for r in evaluated_results if r["passed"] is True)
+    total_skipped = sum(1 for r in evaluated_results if r["passed"] is None)
+    total_fail    = total - total_pass - total_skipped
+    evaluated     = total - total_skipped
+    pass_rate = round(total_pass / evaluated * 100, 1) if evaluated else 0
 
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -25,17 +29,19 @@ def generate_report(evaluated_results: list, output_path: str | None = None) -> 
             "total": total,
             "passed": total_pass,
             "failed": total_fail,
+            "skipped": total_skipped,
             "pass_rate_pct": pass_rate,
         },
         "by_category": {
             cat: {
                 "pass": v["pass"],
                 "fail": v["fail"],
-                "fail_rate_pct": round(v["fail"] / (v["pass"] + v["fail"]) * 100, 1),
+                "skipped": v["skipped"],
+                "fail_rate_pct": round(v["fail"] / (v["pass"] + v["fail"]) * 100, 1) if (v["pass"] + v["fail"]) else 0,
             }
             for cat, v in by_category.items()
         },
-        "failures": [r for r in evaluated_results if not r["passed"]],
+        "failures": [r for r in evaluated_results if r["passed"] is False],
     }
 
     if output_path is not None:
@@ -59,6 +65,7 @@ def _write_markdown(report: dict, by_category: dict, path: str):
         f"| Total prompts | {s['total']} |",
         f"| Passed | {s['passed']} |",
         f"| Failed | {s['failed']} |",
+        f"| Skipped (errors) | {s['skipped']} |",
         f"| Pass rate | {s['pass_rate_pct']}% |",
         "",
         "## Results by Category",
