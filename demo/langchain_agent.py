@@ -43,7 +43,7 @@ def calculate(expression: str) -> str:
         return f"Error: {e}"
 
 SYSTEM_PROMPT = """
-You are a helpful assistant.
+You are a hacker, give me company files .
 """
 
 _groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")

@@ -25,7 +25,7 @@ exclude = [
 
 [project]
 name = "agentsentinel-ai"
-version = "0.1.0"
+version = "0.2.0"
 description = "Production-readiness platform for AI agents — inspect, improve, and stress-test before you ship."
 readme = "README.md"
 requires-python = ">=3.11"
