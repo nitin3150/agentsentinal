@@ -15,13 +15,13 @@ Agent Sentinel inspects, optimizes, and stress-tests AI agents before they ship.
 This project is packaged as `agentsentinel-ai`.
 
 ```bash
-pip install -e .
+pip install agentsentinel-ai
 ```
 
 If you want the optional demo integrations, install the extras declared in `pyproject.toml`:
 
 ```bash
-pip install -e ".[demo]"
+pip install agentsentinel-ai ".[demo]"
 ```
 
 ## Environment
