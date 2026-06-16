@@ -18,12 +18,6 @@ This project is packaged as `agentsentinel-ai`.
 pip install agentsentinel-ai
 ```
 
-If you want the optional demo integrations, install the extras declared in `pyproject.toml`:
-
-```bash
-pip install agentsentinel-ai ".[demo]"
-```
-
 ## Environment
 
 The code uses LiteLLM-compatible model strings. Set one of these model variables:
