@@ -61,7 +61,6 @@ dependencies = [
 crewai  = ["crewai>=0.134.0"]
 adk     = ["google-adk>=1.33.0"]
 llama   = ["llama-index>=0.14.21"]
-demo    = ["agentsentinel[crewai,adk,llama]"]
 
 [project.scripts]
 agentsentinel = "agentsentinel.cli.main:cli"
@@ -71,3 +70,8 @@ Homepage      = "https://github.com/nitin3150/agentsentinel"
 Repository    = "https://github.com/nitin3150/agentsentinel"
 Documentation = "https://github.com/nitin3150/agentsentinel#readme"
 "Bug Tracker" = "https://github.com/nitin3150/agentsentinel/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.0",
+]
