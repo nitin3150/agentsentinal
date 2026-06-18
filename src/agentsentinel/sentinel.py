@@ -46,12 +46,31 @@ class AgentSentinel:
             os.getenv("LLM_MODEL")
             or os.getenv("GROQ_MODEL")
             or os.getenv("OPENROUTER_MODEL")
+            or os.getenv("NVIDIA_MODEL")
             or ""
         )
         if not model:
             return None
-        api_key = os.getenv("LLM_API_KEY") or os.getenv("GROQ_API_KEY") or os.getenv("OPENROUTER_API_KEY") or ""
-        return dspy.LM(model, api_key=api_key, num_retries=3) if api_key else dspy.LM(model, num_retries=3)
+        api_key = (
+            os.getenv("LLM_API_KEY")
+            or os.getenv("GROQ_API_KEY")
+            or os.getenv("OPENROUTER_API_KEY")
+            or os.getenv("NVIDIA_API_KEY")
+            or ""
+        )
+        api_base = (
+            os.getenv("LLM_BASE_URL")
+            or os.getenv("NVIDIA_BASE_URL")
+            or os.getenv("GROQ_BASE_URL")
+            or os.getenv("OPENROUTER_BASE_URL")
+            or None
+        )
+        kwargs: dict = {"num_retries": 3}
+        if api_key:
+            kwargs["api_key"] = api_key
+        if api_base:
+            kwargs["api_base"] = api_base
+        return dspy.LM(model, **kwargs)
 
     @contextmanager
     def _lm_context(self):

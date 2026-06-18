@@ -12,6 +12,7 @@ def check_env() -> None:
         os.getenv("LLM_MODEL")
         or os.getenv("GROQ_MODEL")
         or os.getenv("OPENROUTER_MODEL")
+        or os.getenv("NVIDIA_MODEL")
     )
     if not model:
         raise click.ClickException(

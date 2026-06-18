@@ -8,6 +8,7 @@ DEFAULT_LLM_MODEL = (
     os.getenv("LLM_MODEL")
     or os.getenv("GROQ_MODEL")
     or os.getenv("OPENROUTER_MODEL")
+    or os.getenv("NVIDIA_MODEL")
     or "groq/llama-3.3-70b-versatile"
 )
 
@@ -26,12 +27,28 @@ async def call_llm(
     Returns response text or None on timeout/error. Never raises.
     """
     import litellm
+    api_key = (
+        os.getenv("LLM_API_KEY")
+        or os.getenv("GROQ_API_KEY")
+        or os.getenv("OPENROUTER_API_KEY")
+        or os.getenv("NVIDIA_API_KEY")
+        or None
+    )
+    api_base = (
+        os.getenv("LLM_BASE_URL")
+        or os.getenv("NVIDIA_BASE_URL")
+        or os.getenv("GROQ_BASE_URL")
+        or os.getenv("OPENROUTER_BASE_URL")
+        or None
+    )
     try:
         response = await asyncio.wait_for(
             litellm.acompletion(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=temperature,
+                **({"api_key": api_key} if api_key else {}),
+                **({"api_base": api_base} if api_base else {}),
             ),
             timeout=timeout,
         )
