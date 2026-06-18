@@ -55,6 +55,7 @@ dependencies = [
     "pdfplumber>=0.11",
     "click>=8.0",
     "rich>=13.0",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]

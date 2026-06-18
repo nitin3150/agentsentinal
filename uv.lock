@@ -26,6 +26,7 @@ dependencies = [
     { name = "litellm" },
     { name = "pdfplumber" },
     { name = "pydantic" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "rich" },
 ]
@@ -59,6 +60,7 @@ requires-dist = [
     { name = "llama-index", marker = "extra == 'llama'", specifier = ">=0.14.21" },
     { name = "pdfplumber", specifier = ">=0.11" },
     { name = "pydantic", specifier = ">=2.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0" },
 ]

@@ -1,5 +1,8 @@
 import os
 import click
+from dotenv import load_dotenv
+
+load_dotenv()
 
 VALID_COMPLIANCE = {"hipaa", "soc2", "owasp", "pii", "All"}
 
