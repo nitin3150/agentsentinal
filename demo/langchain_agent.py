@@ -16,6 +16,8 @@ from langchain.agents import create_agent
 
 # ── LiteLLM wrapper ──────────────────────────────────────
 
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "30"))
+
 class LiteLLMChat(BaseChatModel):
     model: str
 
@@ -24,7 +26,7 @@ class LiteLLMChat(BaseChatModel):
             {"role": "user" if m.type == "human" else m.type, "content": m.content}
             for m in messages
         ]
-        response = litellm.completion(model=self.model, messages=lm_messages)
+        response = litellm.completion(model=self.model, messages=lm_messages, timeout=LLM_TIMEOUT)
         content = response.choices[0].message.content  # type: ignore[union-attr]
         return ChatResult(generations=[ChatGeneration(message=AIMessage(content=content))])
 

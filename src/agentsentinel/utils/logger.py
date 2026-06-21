@@ -32,3 +32,4 @@ def setup_logger(name: str = "agentsentinel", level: int = logging.DEBUG) -> Non
     handler.setFormatter(SentinelFormatter())
     logger.addHandler(handler)
     logger.setLevel(level)
+    logger.propagate = False
