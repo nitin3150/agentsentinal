@@ -59,3 +59,12 @@ async def call_llm(
     except Exception as exc:
         logger.warning("LLM call failed: %s: %s", type(exc).__name__, exc)
         return None
+
+
+async def close_litellm_session() -> None:
+    handler = getattr(__import__("litellm"), "base_llm_aiohttp_handler", None)
+    if handler is None:
+        return
+    session = getattr(handler, "client_session", None)
+    if session is not None and not session.closed:
+        await session.close()

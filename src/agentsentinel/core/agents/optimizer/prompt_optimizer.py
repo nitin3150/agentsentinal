@@ -64,6 +64,7 @@ from agentsentinel.core.agents.optimizer.signatures import (
 
 from agentsentinel.core.agents.optimizer.policy_guard import PolicyGuard
 from agentsentinel.models.prompt import OptimizedResult, ChangeLogEntry
+from agentsentinel.utils.llm import close_litellm_session
 import logging
 import difflib
 
@@ -178,11 +179,19 @@ class PromptOptimizer(dspy.Module):
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
-        if loop is not None and loop.is_running():
-            ctx = contextvars.copy_context()
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                return pool.submit(ctx.run, asyncio.run, coro).result()
-        return asyncio.run(coro)
+        try:
+            if loop is not None and loop.is_running():
+                ctx = contextvars.copy_context()
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    return pool.submit(ctx.run, asyncio.run, coro).result()
+            return asyncio.run(coro)
+        finally:
+            if loop is not None and loop.is_running():
+                ctx = contextvars.copy_context()
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    pool.submit(ctx.run, asyncio.run, close_litellm_session()).result()
+            else:
+                asyncio.run(close_litellm_session())
 
     async def forward(
         self,
