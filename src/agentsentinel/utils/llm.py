@@ -42,16 +42,17 @@ async def call_llm(
         or None
     )
     try:
-        response = await asyncio.wait_for(
-            litellm.acompletion(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=temperature,
-                **({"api_key": api_key} if api_key else {}),
-                **({"api_base": api_base} if api_base else {}),
-            ),
-            timeout=timeout,
-        )
+        call_kwargs: dict = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": temperature,
+        }
+        if api_key:
+            call_kwargs["api_key"] = api_key
+        if api_base:
+            call_kwargs["api_base"] = api_base
+
+        response = await asyncio.wait_for(litellm.acompletion(**call_kwargs), timeout=timeout)
         return response.choices[0].message.content  # type: ignore[union-attr]
     except asyncio.TimeoutError:
         logger.warning("LLM call timed out after %.0fs (model=%s)", timeout, model)
