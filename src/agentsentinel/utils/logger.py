@@ -26,8 +26,9 @@ class SentinelFormatter(logging.Formatter):
 
 def setup_logger(name: str = "agentsentinel", level: int = logging.DEBUG) -> None:
     logger = logging.getLogger(name)
-    if logger.handlers:
-        return
+    # Strip any prior handlers so setup_logger is idempotent and resilient to
+    # anything an earlier caller or import may have attached.
+    logger.handlers.clear()
     handler = logging.StreamHandler()
     handler.setFormatter(SentinelFormatter())
     logger.addHandler(handler)
