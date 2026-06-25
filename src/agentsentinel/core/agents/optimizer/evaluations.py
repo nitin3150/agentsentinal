@@ -1,3 +1,5 @@
+import os
+
 from agentsentinel.core.agents.optimizer.policy_guard import PolicyGuard
 import asyncio
 import logging
@@ -94,7 +96,7 @@ def build_optimized_improver(
     trainset:        list[dspy.Example],
     company_policy:  str = "",
     regulations:     str = "",
-    lm_model_string: str = "openai/gpt-4o",
+    lm_model_string: str | None = None,
 ) -> PromptOptimizer:
     """
     Compiles a PromptOptimizer optimised for your Inspector, policy,
@@ -110,9 +112,52 @@ def build_optimized_improver(
 
     5–10 real broken agent prompts is usually enough to get meaningful
     optimisation.
+
+    ``lm_model_string`` is provider-agnostic — pass any LiteLLM-routed model
+    (``"openai/gpt-4o"``, ``"anthropic/claude-3-5-sonnet"``, ``"groq/llama-3.3-70b-versatile"``,
+    ``"vertex_ai/gemini-2.0-flash"``, etc.). When omitted, the model + key +
+    base URL are inherited from the same env vars the runtime uses
+    (``LLM_MODEL`` → ``GROQ_MODEL`` → ``OPENROUTER_MODEL`` → ``NVIDIA_MODEL``,
+    with matching ``*_API_KEY`` / ``*_BASE_URL`` fallbacks), so DSPy
+    compile/training honours the same configuration as inspect/optimize.
     """
 
-    lm = dspy.LM(lm_model_string)
+    if lm_model_string is not None:
+        lm = dspy.LM(lm_model_string)
+    else:
+        model = (
+            os.getenv("LLM_MODEL")
+            or os.getenv("GROQ_MODEL")
+            or os.getenv("OPENROUTER_MODEL")
+            or os.getenv("NVIDIA_MODEL")
+            or ""
+        )
+        if not model:
+            raise ValueError(
+                "build_optimized_improver needs an LLM model. "
+                "Pass lm_model_string=... or set LLM_MODEL "
+                "(+ matching LLM_API_KEY / LLM_BASE_URL) in the environment."
+            )
+        api_key = (
+            os.getenv("LLM_API_KEY")
+            or os.getenv("GROQ_API_KEY")
+            or os.getenv("OPENROUTER_API_KEY")
+            or os.getenv("NVIDIA_API_KEY")
+            or ""
+        )
+        api_base = (
+            os.getenv("LLM_BASE_URL")
+            or os.getenv("NVIDIA_BASE_URL")
+            or os.getenv("GROQ_BASE_URL")
+            or os.getenv("OPENROUTER_BASE_URL")
+            or None
+        )
+        lm_kwargs: dict = {"num_retries": 3}
+        if api_key:
+            lm_kwargs["api_key"] = api_key
+        if api_base:
+            lm_kwargs["api_base"] = api_base
+        lm = dspy.LM(model, **lm_kwargs)
     dspy.configure(lm=lm)
 
     metric = ImprovementMetric(
